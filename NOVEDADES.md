@@ -1,0 +1,2 @@
+- Nuevo apartado «Guía de uso», con el paso a paso de cada pantalla.
+- Actualización desde el programa: cuando hay una versión nueva aparece el botón «Update» en el menú.

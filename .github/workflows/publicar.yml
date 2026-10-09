@@ -1,0 +1,44 @@
+# Al subir una etiqueta vX.Y.Z, prueba el programa, genera MiComercio.exe en Windows
+# y lo publica como una versión (release). De ahí lo descargan los usuarios y el botón Update.
+name: Publicar versión
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Comprobar que la etiqueta coincide con la versión del programa
+        shell: pwsh
+        run: |
+          $version = python -c "import micomercio; print(micomercio.__version__)"
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "La etiqueta ${{ github.ref_name }} no coincide con la versión $version de micomercio/__init__.py"
+          }
+
+      - name: Probar y generar el ejecutable
+        shell: pwsh
+        run: ./construir.ps1
+
+      - name: Calcular la suma de verificación
+        shell: pwsh
+        run: |
+          $suma = (Get-FileHash dist\MiComercio.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist\MiComercio.exe.sha256 -Value "$suma  MiComercio.exe" -Encoding ascii
+
+      - name: Publicar la versión
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/MiComercio.exe dist/MiComercio.exe.sha256 --title "MiComercio ${{ github.ref_name }}" --notes-file NOVEDADES.md
