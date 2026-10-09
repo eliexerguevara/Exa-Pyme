@@ -12,7 +12,7 @@ No se usan notificaciones (webhooks) porque un programa de escritorio no tiene u
 pública donde recibirlas: se consulta la API, que es el otro mecanismo oficial.
 
 Credencial: el Access Token se guarda cifrado con DPAPI en
-%LOCALAPPDATA%\\MiComercio\\mercadopago\\credencial.dpapi. No está en el código fuente, en la
+%LOCALAPPDATA%\\ExaPyme\\mercadopago\\credencial.dpapi. No está en el código fuente, en la
 base de datos, en las copias de seguridad ni en los registros.
 
 Referencia: https://www.mercadopago.com.ar/developers/es/reference/in-person-payments/qr-code/overview
@@ -131,7 +131,7 @@ class ServicioMercadoPago:
     def _pedir(self, metodo: str, ruta: str, cuerpo: dict | None = None, idempotencia: str | None = None,
                token: str | None = None) -> dict:
         cabeceras = {"Authorization": f"Bearer {token or self._token()}", "Content-Type": "application/json",
-                     "User-Agent": "MiComercio"}
+                     "User-Agent": "ExaPyme"}
         if idempotencia:
             cabeceras["X-Idempotency-Key"] = idempotencia
         datos = json.dumps(cuerpo).encode("utf-8") if cuerpo is not None else None
@@ -232,9 +232,9 @@ class ServicioMercadoPago:
                          "latitude": latitud, "longitude": longitud, "reference": d["nombre"].strip()},
         })
         caja = self._pedir("POST", "/v2/pos", {
-            "name": "Caja MiComercio", "store_id": str(sucursal.get("id")), "external_id": f"MCCAJA{sufijo}",
+            "name": "Caja Exa Pyme", "store_id": str(sucursal.get("id")), "external_id": f"MCCAJA{sufijo}",
         }, idempotencia=str(uuid.uuid4()))
-        return {"id": caja.get("id"), "nombre": caja.get("name") or "Caja MiComercio", "externo": caja.get("external_id") or f"MCCAJA{sufijo}",
+        return {"id": caja.get("id"), "nombre": caja.get("name") or "Caja Exa Pyme", "externo": caja.get("external_id") or f"MCCAJA{sufijo}",
                 "activa": True, "qr": (caja.get("qr_response") or {}).get("image") or ""}
 
     # ---- cobros ----------------------------------------------------------

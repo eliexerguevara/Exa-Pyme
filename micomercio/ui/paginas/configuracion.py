@@ -14,7 +14,7 @@ from .config_mp import PanelMercadoPago
 
 ACCIONES = {
     "cambio_precio": "Cambio de precio", "cambio_masivo_precios": "Cambio masivo de precios",
-    "venta_anulada": "Venta anulada", "movimiento_stock": "Ajuste de inventario", "caja_abierta": "Apertura de caja",
+    "venta_anulada": "Venta anulada", "devolucion_parcial": "Devolución de productos", "movimiento_stock": "Ajuste de inventario", "caja_abierta": "Apertura de caja",
     "caja_cerrada": "Cierre de caja", "caja_entrada": "Entrada de efectivo", "caja_salida": "Salida de efectivo",
     "descuento": "Descuento en venta", "pago_confirmado": "Pago confirmado", "pago_rechazado": "Pago rechazado",
     "pago_cancelado": "Pago cancelado", "pago_agregado": "Cobro registrado", "pago_comision": "Comisión cargada",

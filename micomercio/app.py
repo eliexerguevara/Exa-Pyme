@@ -54,7 +54,7 @@ def main() -> int:
     # Tras una actualización, la versión anterior puede tardar unos segundos en cerrarse.
     espera = 20000 if actualizador.ARGUMENTO_REINICIO in sys.argv else 200
     if not candado.tryLock(espera):
-        QMessageBox.information(None, NOMBRE_APP, "MiComercio ya está abierto en esta computadora.")
+        QMessageBox.information(None, NOMBRE_APP, "Exa Pyme ya está abierto en esta computadora.")
         return 0
 
     actualizador.limpiar_restos()

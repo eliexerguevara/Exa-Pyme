@@ -1,9 +1,9 @@
-# Publica una versión nueva de MiComercio.
+# Publica una versión nueva de Exa Pyme.
 #
 #   powershell -ExecutionPolicy Bypass -File .\publicar.ps1 -Version 1.2.0 -Notas "Qué cambió en esta versión"
 #
 # Cambia el número de versión, corre las pruebas, guarda los cambios pendientes y sube el código con la
-# etiqueta v1.2.0. GitHub genera MiComercio.exe y lo publica (tarda unos minutos); a partir de ese momento
+# etiqueta v1.2.0. GitHub genera ExaPyme.exe y lo publica (tarda unos minutos); a partir de ese momento
 # los programas instalados muestran el botón Update.
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version,

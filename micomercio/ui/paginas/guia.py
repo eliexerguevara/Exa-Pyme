@@ -24,7 +24,7 @@ def _nota(texto: str, clase: str = "nota") -> str:
 TEMAS: list[tuple[str, str]] = [
     ("1. Primeros pasos", """
 <h2>Primeros pasos</h2>
-<p>Si es la primera vez que usás MiComercio, seguí estos pasos en orden. Después, el trabajo de todos los días
+<p>Si es la primera vez que usás Exa Pyme, seguí estos pasos en orden. Después, el trabajo de todos los días
 es más corto: abrir la caja, vender y cerrar la caja.</p>
 <ol>
   <li><b>Completá los datos del comercio.</b> Entrá a <b>Configuración</b> → pestaña <b>Comercio y ticket</b>,
@@ -156,6 +156,15 @@ en la caja que está abierta.</p>
   <li>Pulsá <b>Confirmar venta</b>. Aparece el número de venta y el vuelto; desde ahí podés <b>Imprimir ticket</b>.
       Con Enter queda todo listo para la venta siguiente.</li>
 </ol>
+""<h3>Pago combinado: cobrar con dos o más medios</h3>
+<ol>
+  <li>Con los productos ya cargados, pulsá <b>Pago combinado (F9)</b>.</li>
+  <li>Escribí cuánto paga el cliente con cada medio. Por ejemplo, $ 10.000 en <b>Efectivo</b>.</li>
+  <li>En el otro medio pulsá <b>Resto</b>: se completa solo con lo que falta para llegar al total.</li>
+  <li>Cuando «Falta asignar» diga <b>«Nada: está completo»</b>, pulsá <b>Confirmar venta</b>.</li>
+</ol>
+<p>La parte de transferencia o Mercado Pago puede quedar pendiente de verificar, igual que en un cobro simple.
+En la caja, cada parte se suma a su medio de pago.</p>
 """ + _nota("Al confirmar, el stock se descuenta solo. Si no hay stock suficiente de un producto, el programa avisa "
             "y no deja agregarlo.") + _nota(
     "El ticket es un comprobante interno y dice «Documento no válido como factura». Para entregar una factura "
@@ -235,9 +244,22 @@ En la caja vas a ver el importe neto que recibiste.</p>
 </ol>
 <p>Al anular, los productos vuelven al stock y el dinero cobrado se anota como devolución en la caja abierta.
 La venta no se borra: queda en el historial marcada como «Anulada».</p>
-""" + _nota("Las ventas se anulan completas. Si el cliente devuelve solo un producto, cargá la mercadería desde "
-            "<b>Inventario</b> → <b>Registrar movimiento</b> → «Devolución de un cliente», y registrá la salida "
-            "del dinero en <b>Caja diaria</b> → <b>Salida de efectivo</b>.")),
+<h3>Devolver solo algunos productos</h3>
+<p>Cuando el cliente devuelve una parte de lo que compró. Solo puede hacerlo un administrador, con la caja abierta
+y la venta ya cobrada.</p>
+<ol>
+  <li>Abrí el detalle de la venta y pulsá <b>Devolver productos</b>.</li>
+  <li>Escribí cuántas unidades devuelve de cada producto (el botón <b>Todo</b> pone todo lo que queda de ese producto).</li>
+  <li>Elegí por qué medio le devolvés el dinero y escribí el motivo.</li>
+  <li>Revisá el <b>Importe a devolver</b> y pulsá <b>Registrar devolución</b>.</li>
+</ol>
+<p>Los productos devueltos vuelven al stock, el dinero sale de la caja como devolución y la venta sigue vigente por
+el resto. El importe se calcula con el precio que realmente pagó el cliente, incluido el descuento de la venta.
+En el detalle, la columna <b>Devuelto</b> muestra lo ya devuelto de cada producto.</p>
+""" + _nota("Si la venta tiene factura de ARCA, al registrar la devolución el programa emite una nota de crédito "
+            "por lo devuelto. Necesita Internet y no se puede deshacer.", "ojo") + _nota(
+    "Si se cobró con tarjeta o Mercado Pago, el programa anota la devolución pero no mueve el dinero: hacela también "
+    "desde la terminal o desde tu cuenta de Mercado Pago.")),
 
     ("8. Cerrar la caja", """
 <h2>Cerrar la caja</h2>
@@ -390,6 +412,7 @@ los ajustes de inventario y los cierres de caja, con fecha y usuario.</p>
   <tr><td><b>F6</b></td><td>Cobrar con tarjeta</td></tr>
   <tr><td><b>F7</b></td><td>Cobrar con transferencia</td></tr>
   <tr><td><b>F8</b></td><td>Cobrar con Mercado Pago</td></tr>
+  <tr><td><b>F9</b></td><td>Pago combinado (dos o más medios)</td></tr>
   <tr><td><b>+</b> y <b>−</b></td><td>Sumar o restar una unidad al producto seleccionado en la venta</td></tr>
   <tr><td><b>Supr</b></td><td>Quitar de la venta el producto seleccionado</td></tr>
 </table>
@@ -399,7 +422,7 @@ los ajustes de inventario y los cierres de caja, con fecha y usuario.</p>
 
     ("16. Facturación electrónica (ARCA)", """
 <h2>Facturación electrónica (ARCA)</h2>
-<p>MiComercio puede emitir facturas electrónicas A, B y C y notas de crédito, pidiendo el CAE a ARCA por Internet.
+<p>Exa Pyme puede emitir facturas electrónicas A, B y C y notas de crédito, pidiendo el CAE a ARCA por Internet.
 Viene desactivado: hasta que lo configures, el programa sigue entregando tickets internos.</p>
 <h3>Configurarlo por primera vez</h3>
 <ol>
@@ -439,7 +462,7 @@ productos vuelven al stock y la devolución del dinero se registra en la caja.</
     "certificado nuevo: el anterior sigue funcionando mientras tanto.", "ojo")),
     ("17. Actualizar el programa", """
 <h2>Actualizar el programa</h2>
-<p>Cuando se publica una versión nueva de MiComercio, aparece el botón azul <b>Update</b> en la parte de abajo del
+<p>Cuando se publica una versión nueva de Exa Pyme, aparece el botón azul <b>Update</b> en la parte de abajo del
 menú, con el número de la versión. El programa lo consulta solo al abrirse (hace falta Internet) y solo lo ve
 el administrador.</p>
 <ol>
@@ -447,7 +470,7 @@ el administrador.</p>
   <li>Pulsá <b>Update</b>. Se muestra qué versión es y qué novedades trae.</li>
   <li>Pulsá <b>Actualizar ahora</b>. El programa hace primero una copia de seguridad de tus datos y después
       descarga la versión nueva.</li>
-  <li>Al terminar, MiComercio se cierra y se vuelve a abrir solo, ya actualizado. Ingresá con tu usuario como siempre.</li>
+  <li>Al terminar, Exa Pyme se cierra y se vuelve a abrir solo, ya actualizado. Ingresá con tu usuario como siempre.</li>
 </ol>
 <p>Para consultar a mano si hay una versión nueva: <b>Configuración</b> → <b>Comercio y ticket</b> →
 <b>Buscar actualizaciones</b>. Ahí también figura la versión instalada.</p>

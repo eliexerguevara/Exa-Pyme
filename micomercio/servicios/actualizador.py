@@ -1,8 +1,8 @@
 """Actualización del programa desde las versiones publicadas en GitHub.
 
 Cada versión publicada (release) del repositorio trae dos archivos:
-    MiComercio.exe          el programa
-    MiComercio.exe.sha256   su suma de verificación
+    ExaPyme.exe          el programa
+    ExaPyme.exe.sha256   su suma de verificación
 
 El programa consulta cuál es la última versión, descarga el .exe por HTTPS desde
 ese repositorio, comprueba la suma y recién entonces reemplaza el ejecutable.
@@ -29,7 +29,7 @@ REPOSITORIO = "eliexerguevara/Exa-Pyme"
 URL_REPOSITORIO = f"https://github.com/{REPOSITORIO}"
 URL_ULTIMA_VERSION = f"https://api.github.com/repos/{REPOSITORIO}/releases/latest"
 PREFIJO_DESCARGAS = f"{URL_REPOSITORIO}/releases/download/"
-ARCHIVO = "MiComercio.exe"
+ARCHIVO = "ExaPyme.exe"
 ARCHIVO_SUMA = ARCHIVO + ".sha256"
 SUFIJO_ANTERIOR = ".anterior"
 SUFIJO_NUEVO = ".nuevo"
@@ -51,7 +51,7 @@ def version_tupla(texto: str) -> tuple[int, ...]:
 
 
 def _obtener(url: str, tiempo: int = 15) -> bytes:
-    pedido = urllib.request.Request(url, headers={"User-Agent": f"MiComercio/{__version__}", "Accept": "application/vnd.github+json"})
+    pedido = urllib.request.Request(url, headers={"User-Agent": f"ExaPyme/{__version__}", "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(pedido, timeout=tiempo) as respuesta:
         return respuesta.read()
 
@@ -92,7 +92,7 @@ def descargar(actualizacion: Actualizacion, destino: Path, progreso=None, obtene
         if not re.fullmatch(r"[0-9a-f]{64}", esperada):
             raise ValueError("suma inválida")
         calculada, descargado = hashlib.sha256(), 0
-        pedido = urllib.request.Request(actualizacion.url_exe, headers={"User-Agent": f"MiComercio/{__version__}"})
+        pedido = urllib.request.Request(actualizacion.url_exe, headers={"User-Agent": f"ExaPyme/{__version__}"})
         with abrir(pedido, timeout=30) as respuesta, open(destino, "wb") as archivo:
             total = int(respuesta.headers.get("Content-Length") or actualizacion.tamano or 0)
             primero = True
@@ -113,7 +113,7 @@ def descargar(actualizacion: Actualizacion, destino: Path, progreso=None, obtene
     except PermissionError:
         raise ErrorNegocio(
             "No se pudo guardar la actualización en la carpeta del programa. "
-            "Cerrá MiComercio, descargá la versión nueva desde la página y reemplazá el archivo a mano."
+            "Cerrá Exa Pyme, descargá la versión nueva desde la página y reemplazá el archivo a mano."
         ) from None
     except (OSError, ValueError) as e:
         log.warning("Falló la descarga de la actualización: %s", e)
@@ -127,7 +127,7 @@ def descargar(actualizacion: Actualizacion, destino: Path, progreso=None, obtene
 
 
 def ruta_ejecutable() -> Path | None:
-    """Ruta de MiComercio.exe cuando se ejecuta empaquetado; None en modo desarrollo."""
+    """Ruta de ExaPyme.exe cuando se ejecuta empaquetado; None en modo desarrollo."""
     return Path(sys.executable) if getattr(sys, "frozen", False) else None
 
 
@@ -181,12 +181,12 @@ def limpiar_restos() -> None:
 
 
 def actualizar_sin_interfaz(ruta_resultado: str | None = None) -> int:
-    """MiComercio.exe --actualizar [archivo_resultado]: actualiza sin abrir ventanas. Devuelve 0 si salió bien."""
+    """ExaPyme.exe --actualizar [archivo_resultado]: actualiza sin abrir ventanas. Devuelve 0 si salió bien."""
     codigo = 0
     try:
         exe = ruta_ejecutable()
         if exe is None:
-            raise ErrorNegocio("La actualización automática solo funciona en el programa instalado (MiComercio.exe).")
+            raise ErrorNegocio("La actualización automática solo funciona en el programa instalado (ExaPyme.exe).")
         instalada = actualizar(exe)
         mensaje = f"ACTUALIZADO {instalada.version}" if instalada else f"AL DIA {__version__}"
     except ErrorNegocio as e:

@@ -1,19 +1,20 @@
-# MiComercio
+# Exa Pyme
 
 Sistema de ventas e inventario para Windows 10 y 11, pensado para un comercio minorista de Argentina.
-Aplicación de escritorio (Python + PySide6 + SQLite), empaquetada en un único `MiComercio.exe`.
+Aplicación de escritorio (Python + PySide6 + SQLite), empaquetada en un único `ExaPyme.exe`.
 
 Estado: **las 8 etapas están implementadas**: ventas, inventario, caja, reportes, copias, facturación
 electrónica de ARCA y cobro con QR de Mercado Pago.
 
 ## Para el usuario final
 
-**[Descargar MiComercio.exe (última versión)](https://github.com/eliexerguevara/Exa-Pyme/releases/latest/download/MiComercio.exe)**
+**[Descargar ExaPyme.exe (última versión)](https://github.com/eliexerguevara/Exa-Pyme/releases/latest/download/ExaPyme.exe)**
 
-Guardar el archivo en una carpeta propia (por ejemplo `C:\MiComercio`) y abrirlo con doble clic. No hay que instalar nada más.
+Guardar el archivo en una carpeta propia (por ejemplo `C:\ExaPyme`) y abrirlo con doble clic. No hay que instalar nada más.
 La primera vez pide crear el usuario administrador.
 
-Los datos se guardan en `%LOCALAPPDATA%\MiComercio`:
+Los datos se guardan en `%LOCALAPPDATA%\ExaPyme`. El programa antes se llamaba MiComercio: si encuentra la carpeta
+`%LOCALAPPDATA%\MiComercio`, la renombra y sigue usando los mismos datos.
 
 | Archivo o carpeta | Contenido |
 |---|---|
@@ -43,7 +44,7 @@ python -m venv .venv
 ```
 
 Para trabajar con una base de datos de prueba sin tocar la real, definir la variable
-`MICOMERCIO_DATOS` con otra carpeta antes de ejecutar.
+`EXAPYME_DATOS` con otra carpeta antes de ejecutar.
 
 ### Generar el .exe
 
@@ -52,8 +53,8 @@ powershell -ExecutionPolicy Bypass -File .\construir.ps1
 ```
 
 El script instala las dependencias con versiones fijas, ejecuta las pruebas, genera el ícono, empaqueta con
-PyInstaller (`MiComercio.spec`) y por último ejecuta `MiComercio.exe --autoprueba`, que comprueba el
-ejecutable sobre una base temporal. Si algún paso falla, se detiene. Resultado: `dist\MiComercio.exe`.
+PyInstaller (`ExaPyme.spec`) y por último ejecuta `ExaPyme.exe --autoprueba`, que comprueba el
+ejecutable sobre una base temporal. Si algún paso falla, se detiene. Resultado: `dist\ExaPyme.exe`.
 
 ### Publicar una versión nueva
 
@@ -139,9 +140,5 @@ comercio (Mercado Pago ofrece credenciales y usuarios de prueba).
 ## Lo que todavía no hace
 
 - Mercado Pago: no hace devoluciones ni recibe notificaciones (webhooks); no cobra con Point ni con link de pago.
-- Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos; las notas de crédito son
-  por el total de la factura. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
-- Devoluciones parciales: una venta se anula completa. Una devolución suelta se carga como movimiento
-  de inventario.
-- Pago combinado (parte en efectivo y parte con tarjeta) desde la pantalla de venta.
+- Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
 - Recuperación de la contraseña del administrador si se la olvida.

@@ -1,4 +1,4 @@
-"""Autoprueba del programa ya empaquetado:  MiComercio.exe --autoprueba [archivo_resultado]
+"""Autoprueba del programa ya empaquetado:  ExaPyme.exe --autoprueba [archivo_resultado]
 
 Trabaja sobre una base de datos temporal (nunca sobre los datos reales), sin
 mostrar ventanas: crea un producto, registra una venta, recorre todas las
@@ -18,8 +18,8 @@ from decimal import Decimal
 
 def ejecutar(ruta_resultado: str | None = None) -> int:
     temporal = tempfile.mkdtemp(prefix="micomercio_autoprueba_")
-    os.environ["MICOMERCIO_DATOS"] = temporal
-    os.environ["MICOMERCIO_SIN_ACTUALIZACIONES"] = "1"
+    os.environ["EXAPYME_DATOS"] = temporal
+    os.environ["EXAPYME_SIN_ACTUALIZACIONES"] = "1"
     codigo, mensaje = 0, "OK"
     db = None
     try:

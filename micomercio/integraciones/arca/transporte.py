@@ -27,7 +27,7 @@ def enviar(url: str, accion: str, cuerpo: str, tiempo: int = 25) -> bytes:
     sobre = ('<?xml version="1.0" encoding="UTF-8"?>'
              '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
              f"<soapenv:Header/><soapenv:Body>{cuerpo}</soapenv:Body></soapenv:Envelope>").encode("utf-8")
-    cabeceras = {"Content-Type": "text/xml; charset=utf-8", "SOAPAction": f'"{accion}"', "User-Agent": "MiComercio"}
+    cabeceras = {"Content-Type": "text/xml; charset=utf-8", "SOAPAction": f'"{accion}"', "User-Agent": "ExaPyme"}
     for contexto in (None, _contexto_compatible()):
         try:
             pedido = urllib.request.Request(url, data=sobre, headers=cabeceras)

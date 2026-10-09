@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Receta de PyInstaller: un único MiComercio.exe, sin consola.
-# Uso:  pyinstaller MiComercio.spec --noconfirm --clean   (lo hace construir.ps1)
+# Receta de PyInstaller: un único ExaPyme.exe, sin consola.
+# Uso:  pyinstaller ExaPyme.spec --noconfirm --clean   (lo hace construir.ps1)
 
 a = Analysis(
     ["main.py"],
@@ -19,7 +19,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="MiComercio",
+    name="ExaPyme",
     icon="recursos/micomercio.ico",
     console=False,
     upx=False,

@@ -12,11 +12,12 @@ from ..db.esquema import TABLAS_REQUERIDAS, VERSION_ESQUEMA
 from ..registro import log
 from ..rutas import carpeta_copias_predeterminada
 
-PREFIJO = "MiComercio_"
+PREFIJO = "ExaPyme_"
+PREFIJOS = (PREFIJO, "MiComercio_")  # las copias hechas con el nombre anterior siguen sirviendo
 
 
 def validar_copia(ruta: str | Path) -> dict:
-    """Comprueba que el archivo sea una base de MiComercio sana. Lanza ErrorNegocio si no lo es."""
+    """Comprueba que el archivo sea una base de Exa Pyme sana. Lanza ErrorNegocio si no lo es."""
     ruta = Path(ruta)
     if not ruta.is_file() or ruta.stat().st_size == 0:
         raise ErrorNegocio("El archivo de la copia no existe o está vacío.")
@@ -42,9 +43,9 @@ def validar_copia(ruta: str | Path) -> dict:
     if integridad != "ok" or claves:
         raise ErrorNegocio("La copia de seguridad está dañada: no pasó la verificación de integridad.")
     if not TABLAS_REQUERIDAS <= tablas or version < 1:
-        raise ErrorNegocio("El archivo elegido no es una copia de seguridad de MiComercio.")
+        raise ErrorNegocio("El archivo elegido no es una copia de seguridad de Exa Pyme.")
     if version > VERSION_ESQUEMA:
-        raise ErrorNegocio("La copia fue creada con una versión más nueva de MiComercio. Actualizá el programa para restaurarla.")
+        raise ErrorNegocio("La copia fue creada con una versión más nueva de Exa Pyme. Actualizá el programa para restaurarla.")
     return {"version": version, "ventas": ventas, "productos": productos}
 
 
@@ -91,7 +92,8 @@ class Copias:
 
     def listar(self) -> list[dict]:
         copias = []
-        for archivo in self.carpeta().glob(f"{PREFIJO}*.db"):
+        archivos = [a for prefijo in PREFIJOS for a in self.carpeta().glob(f"{prefijo}*.db")]
+        for archivo in archivos:
             info = archivo.stat()
             partes = archivo.stem.split("_")
             copias.append({
@@ -99,7 +101,7 @@ class Copias:
                 "fecha": datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 "tipo": {"auto": "Automática", "manual": "Manual"}.get(partes[-1], "Antes de restaurar"),
             })
-        return sorted(copias, key=lambda c: c["nombre"], reverse=True)
+        return sorted(copias, key=lambda c: c["fecha"], reverse=True)
 
     def automatica_si_corresponde(self) -> Path | None:
         """Una copia automática por día, conservando solo las más recientes."""

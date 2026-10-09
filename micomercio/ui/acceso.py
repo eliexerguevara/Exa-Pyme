@@ -9,9 +9,9 @@ from .comunes import Dialogo, etiqueta
 
 class DialogoPrimerUso(Dialogo):
     def __init__(self, ctx):
-        super().__init__(None, "Bienvenido a MiComercio", "Crear y empezar", 480)
+        super().__init__(None, "Bienvenido a Exa Pyme", "Crear y empezar", 480)
         self.ctx = ctx
-        self.cuerpo.insertWidget(0, etiqueta("Bienvenido a MiComercio", "titulo"))
+        self.cuerpo.insertWidget(0, etiqueta("Bienvenido a Exa Pyme", "titulo"))
         self.cuerpo.insertWidget(1, etiqueta(
             "Es la primera vez que se abre el programa en esta computadora. Creá el usuario administrador: "
             "es quien puede cambiar precios, anular ventas y configurar el sistema.", "suave", True))
@@ -42,7 +42,7 @@ class DialogoPrimerUso(Dialogo):
 
 class DialogoIngreso(Dialogo):
     def __init__(self, ctx):
-        super().__init__(None, "MiComercio", "Ingresar", 380)
+        super().__init__(None, "Exa Pyme", "Ingresar", 380)
         self.ctx = ctx
         self.cuerpo.insertWidget(0, etiqueta(ctx.config.obtener("comercio_nombre"), "titulo"))
         self.cuerpo.insertWidget(1, etiqueta("Ingresá con tu usuario y contraseña.", "suave"))

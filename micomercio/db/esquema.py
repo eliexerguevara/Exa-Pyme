@@ -281,6 +281,42 @@ MIGRACIONES: list[str] = [
     CREATE UNIQUE INDEX ux_fiscal_numero
         ON comprobantes_fiscales(entorno, cuit_emisor, punto_venta, tipo, numero) WHERE estado = 'autorizada';
     """,
+    # ---- versión 3: devoluciones parciales --------------------------------
+    """
+    CREATE TABLE devoluciones (
+        id              INTEGER PRIMARY KEY,
+        venta_id        INTEGER NOT NULL REFERENCES ventas(id),
+        fecha           TEXT NOT NULL,
+        caja_id         INTEGER REFERENCES cajas(id),
+        usuario_id      INTEGER REFERENCES usuarios(id),
+        motivo          TEXT NOT NULL,
+        medio           TEXT NOT NULL,
+        total_cent      INTEGER NOT NULL,
+        neto_cent       INTEGER NOT NULL,
+        impuestos_cent  INTEGER NOT NULL,
+        costo_cent      INTEGER NOT NULL
+    );
+    CREATE INDEX ix_devoluciones_venta ON devoluciones(venta_id);
+    CREATE INDEX ix_devoluciones_fecha ON devoluciones(fecha);
+
+    CREATE TABLE devolucion_items (
+        id              INTEGER PRIMARY KEY,
+        devolucion_id   INTEGER NOT NULL REFERENCES devoluciones(id),
+        venta_item_id   INTEGER NOT NULL REFERENCES venta_items(id),
+        producto_id     INTEGER NOT NULL REFERENCES productos(id),
+        cantidad_mil    INTEGER NOT NULL CHECK (cantidad_mil > 0),
+        total_cent      INTEGER NOT NULL,
+        neto_cent       INTEGER NOT NULL,
+        impuesto_cent   INTEGER NOT NULL
+    );
+    CREATE INDEX ix_devolucion_items_item ON devolucion_items(venta_item_id);
+    CREATE INDEX ix_devolucion_items_devolucion ON devolucion_items(devolucion_id);
+
+    -- Notas de crédito parciales: guardan qué se devuelve hasta que la devolución queda registrada.
+    ALTER TABLE comprobantes_fiscales ADD COLUMN parcial INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN devolucion_json TEXT;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN devolucion_id INTEGER REFERENCES devoluciones(id);
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)
@@ -298,7 +334,7 @@ def migrar(db) -> None:
         from ..core.errores import ErrorNegocio
 
         raise ErrorNegocio(
-            "La base de datos fue creada con una versión más nueva de MiComercio. "
+            "La base de datos fue creada con una versión más nueva de Exa Pyme. "
             "Actualizá el programa para poder abrirla."
         )
     for version in range(actual + 1, VERSION_ESQUEMA + 1):

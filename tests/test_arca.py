@@ -391,7 +391,7 @@ def test_migracion_desde_la_version_1(tmp_path):
     conn.commit()
     conn.close()
     db = BaseDatos(ruta)
-    assert db.valor("PRAGMA user_version") == 2 and db.valor("SELECT COUNT(*) FROM usuarios") == 1
+    assert db.valor("PRAGMA user_version") == len(MIGRACIONES) and db.valor("SELECT COUNT(*) FROM usuarios") == 1
     assert "cuit_emisor" in [c["name"] for c in db.consultar("PRAGMA table_info(comprobantes_fiscales)")]
     db.cerrar()
 

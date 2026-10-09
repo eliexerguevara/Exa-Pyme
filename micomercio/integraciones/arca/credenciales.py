@@ -1,6 +1,6 @@
 """Clave privada, pedido de certificado y certificado de ARCA.
 
-Dónde se guarda cada cosa (carpeta %LOCALAPPDATA%\\MiComercio\\arca\\<entorno>):
+Dónde se guarda cada cosa (carpeta %LOCALAPPDATA%\\ExaPyme\\arca\\<entorno>):
     clave.dpapi          clave privada en uso, cifrada para el usuario de Windows (DPAPI)
     clave_nueva.dpapi    clave recién generada, a la espera de su certificado
     certificado.crt      certificado emitido por ARCA (no es secreto)

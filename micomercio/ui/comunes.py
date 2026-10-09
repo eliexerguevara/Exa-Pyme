@@ -24,7 +24,7 @@ def _mensaje(padre, icono, titulo: str, texto: str) -> QMessageBox:
     return caja
 
 
-def informar(padre, texto: str, titulo: str = "MiComercio") -> None:
+def informar(padre, texto: str, titulo: str = "Exa Pyme") -> None:
     _mensaje(padre, QMessageBox.Information, titulo, texto).exec()
 
 

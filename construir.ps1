@@ -1,4 +1,4 @@
-# Genera dist\MiComercio.exe de forma reproducible.
+# Genera dist\ExaPyme.exe de forma reproducible.
 # Uso (PowerShell, desde la carpeta del proyecto):   .\construir.ps1
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -22,16 +22,16 @@ Write-Host "Generando el icono..."
 if ($LASTEXITCODE -ne 0) { throw "No se pudo generar el icono." }
 
 Write-Host "Empaquetando con PyInstaller..."
-& $py -m PyInstaller MiComercio.spec --noconfirm --clean --log-level WARN
+& $py -m PyInstaller ExaPyme.spec --noconfirm --clean --log-level WARN
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller fallo." }
 
 Write-Host "Probando el ejecutable (autoprueba sobre una base temporal)..."
 $resultado = Join-Path $env:TEMP "micomercio_autoprueba.txt"
-$proceso = Start-Process -FilePath ".\dist\MiComercio.exe" -ArgumentList "--autoprueba", "`"$resultado`"" -Wait -PassThru
+$proceso = Start-Process -FilePath ".\dist\ExaPyme.exe" -ArgumentList "--autoprueba", "`"$resultado`"" -Wait -PassThru
 if ($proceso.ExitCode -ne 0) {
     if (Test-Path $resultado) { Get-Content $resultado }
     throw "El ejecutable no paso la autoprueba."
 }
 
-$exe = Get-Item ".\dist\MiComercio.exe"
+$exe = Get-Item ".\dist\ExaPyme.exe"
 Write-Host ("Listo: {0} ({1:N1} MB)" -f $exe.FullName, ($exe.Length / 1MB))

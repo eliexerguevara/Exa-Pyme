@@ -81,7 +81,7 @@ class GestorActualizaciones(QObject):
         if error:
             advertir(self.ventana, error, "Actualizaciones")
         elif actualizacion is None:
-            informar(self.ventana, f"Ya tenés la última versión de MiComercio ({__version__}).", "Actualizaciones")
+            informar(self.ventana, f"Ya tenés la última versión de Exa Pyme ({__version__}).", "Actualizaciones")
         else:
             self.actualizar()
 
@@ -92,12 +92,12 @@ class GestorActualizaciones(QObject):
         exe = actualizador.ruta_ejecutable()
         if exe is None:
             informar(self.ventana, f"Hay una versión nueva ({a.version}), pero la actualización automática solo funciona "
-                                   "en el programa instalado (MiComercio.exe).", "Actualizaciones")
+                                   "en el programa instalado (ExaPyme.exe).", "Actualizaciones")
             return
         notas = f"\n\nNovedades:\n{a.notas[:900]}" if a.notas else ""
         if not confirmar(
             self.ventana,
-            f"Hay una versión nueva de MiComercio: {a.version} (tenés la {__version__}).{notas}\n\n"
+            f"Hay una versión nueva de Exa Pyme: {a.version} (tenés la {__version__}).{notas}\n\n"
             "Antes de actualizar se hace una copia de seguridad de tus datos. Al terminar, el programa se cierra "
             "y se vuelve a abrir solo. Si hay una venta a medio cargar, terminala antes.\n\n¿Actualizar ahora?",
             "Actualizar ahora", "Más tarde", "Actualización disponible",
@@ -105,7 +105,7 @@ class GestorActualizaciones(QObject):
             return
         self.ctx.copias.crear("manual")
         self._dialogo = QProgressDialog("Descargando la actualización…", "", 0, 100, self.ventana)
-        self._dialogo.setWindowTitle("Actualizando MiComercio")
+        self._dialogo.setWindowTitle("Actualizando Exa Pyme")
         self._dialogo.setCancelButton(None)
         self._dialogo.setWindowModality(Qt.WindowModal)
         self._dialogo.setMinimumDuration(0)
@@ -129,7 +129,7 @@ class GestorActualizaciones(QObject):
         if error:
             advertir(self.ventana, error, "Actualizaciones")
             return
-        informar(self.ventana, f"MiComercio se actualizó a la versión {version}.\n\nEl programa se va a reiniciar.",
+        informar(self.ventana, f"Exa Pyme se actualizó a la versión {version}.\n\nEl programa se va a reiniciar.",
                  "Actualización instalada")
         actualizador.reiniciar(exe)
         self.ventana.close()

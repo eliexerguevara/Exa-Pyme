@@ -11,7 +11,7 @@ from ..comunes import Dialogo, boton, confirmar, etiqueta, fila, informar, panel
 AYUDA = """<b>Cómo obtener el Access Token</b>
 <ol>
 <li>Entrá a <b>mercadopago.com.ar/developers</b> con la cuenta de Mercado Pago del comercio y abrí <b>Tus integraciones</b>.</li>
-<li>Creá una aplicación para <b>pagos presenciales con Código QR</b> (el nombre puede ser «MiComercio»).</li>
+<li>Creá una aplicación para <b>pagos presenciales con Código QR</b> (el nombre puede ser «Exa Pyme»).</li>
 <li>En <b>Credenciales de producción</b> copiá el <b>Access Token</b> (empieza con APP_USR-) y pegalo acá.</li>
 </ol>
 El Access Token es como una contraseña: no lo compartas ni lo envíes por mensaje. Acá se guarda cifrado para tu

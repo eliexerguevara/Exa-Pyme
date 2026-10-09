@@ -99,11 +99,21 @@ class Reportes:
                WHERE estado = 'anulada' AND fecha >= ? AND fecha < ?""",
             (inicio, fin),
         )
-        ganancia = v["neto"] - costo
+        # Devoluciones parciales del período (de ventas vigentes): restan de lo vendido y de su costo.
+        dev = self.db.uno(
+            """SELECT COUNT(*) AS cantidad, COALESCE(SUM(d.total_cent), 0) AS total, COALESCE(SUM(d.neto_cent), 0) AS neto,
+                      COALESCE(SUM(d.impuestos_cent), 0) AS impuestos, COALESCE(SUM(d.costo_cent), 0) AS costo
+               FROM devoluciones d JOIN ventas v ON v.id = d.venta_id
+               WHERE v.estado = 'completada' AND d.fecha >= ? AND d.fecha < ?""",
+            (inicio, fin),
+        )
+        neto, costo = v["neto"] - dev["neto"], costo - dev["costo"]
+        ganancia = neto - costo
         return {
-            "ventas_cantidad": v["cantidad"], "facturacion_cent": v["total"], "neto_cent": v["neto"],
-            "impuestos_cent": v["impuestos"], "descuentos_cent": v["descuentos"], "costo_cent": costo,
-            "ganancia_bruta_cent": ganancia, "margen_pct": _pct(ganancia, v["neto"]),
+            "ventas_cantidad": v["cantidad"], "facturacion_cent": v["total"] - dev["total"], "neto_cent": neto,
+            "impuestos_cent": v["impuestos"] - dev["impuestos"], "descuentos_cent": v["descuentos"], "costo_cent": costo,
+            "ganancia_bruta_cent": ganancia, "margen_pct": _pct(ganancia, neto),
+            "parciales_cantidad": dev["cantidad"], "parciales_cent": dev["total"],
             "cobrado_cent": p["cobros"] - p["devoluciones"], "devoluciones_cent": p["devoluciones"],
             "comisiones_cent": p["comisiones"], "pendientes_cent": pendientes,
             "anuladas_cantidad": anuladas["cantidad"], "anuladas_cent": anuladas["total"],
@@ -122,6 +132,7 @@ class Reportes:
             ["Ingresos cobrados (pagos confirmados menos devoluciones)", d(c["cobrado_cent"])],
             ["Pagos pendientes de confirmar", d(c["pendientes_cent"])],
             ["Devoluciones de dinero", d(c["devoluciones_cent"])],
+            ["Devoluciones parciales de productos (ya descontadas de las ventas)", d(c["parciales_cent"])],
             ["Ventas anuladas (cantidad)", ("entero", c["anuladas_cantidad"])],
             ["Ventas anuladas (importe)", d(c["anuladas_cent"])],
             ["Costo de la mercadería vendida", d(c["costo_cent"])],
@@ -163,11 +174,15 @@ class Reportes:
         inicio, fin = rango_dias(desde, hasta)
         filas = []
         for f in self.db.consultar(
-            """SELECT p.codigo, p.nombre, SUM(i.cantidad_mil) AS cantidad, SUM(i.total_cent) AS total,
-                      SUM(i.neto_cent) AS neto, SUM(i.costo_unit_cent * i.cantidad_mil) AS costo_mil
+            """SELECT p.codigo, p.nombre, SUM(i.cantidad_mil - COALESCE(r.cantidad, 0)) AS cantidad,
+                      SUM(i.total_cent - COALESCE(r.total, 0)) AS total, SUM(i.neto_cent - COALESCE(r.neto, 0)) AS neto,
+                      SUM(i.costo_unit_cent * (i.cantidad_mil - COALESCE(r.cantidad, 0))) AS costo_mil
                FROM venta_items i JOIN ventas v ON v.id = i.venta_id JOIN productos p ON p.id = i.producto_id
+               LEFT JOIN (SELECT venta_item_id, SUM(cantidad_mil) AS cantidad, SUM(total_cent) AS total, SUM(neto_cent) AS neto
+                          FROM devolucion_items GROUP BY venta_item_id) r ON r.venta_item_id = i.id
                WHERE v.estado = 'completada' AND v.fecha >= ? AND v.fecha < ?
-               GROUP BY i.producto_id ORDER BY cantidad DESC, total DESC LIMIT 200""",
+               GROUP BY i.producto_id HAVING SUM(i.cantidad_mil - COALESCE(r.cantidad, 0)) > 0
+               ORDER BY 3 DESC, 4 DESC LIMIT 200""",
             (inicio, fin),
         ):
             costo = int(redondear(Decimal(f["costo_mil"]) / 1000, 0))
@@ -237,6 +252,13 @@ class Reportes:
                 filas.append([v["id"], v["fecha"], "Descuento", v["descuento_cent"], v["total_cent"], "", v["usuario"]])
             if v["estado"] == "anulada":
                 filas.append([v["id"], v["anulada_en"], "Anulación", v["total_cent"], v["total_cent"], v["motivo_anulacion"], v["usuario"]])
+        for dv in self.db.consultar(
+            """SELECT d.*, v.total_cent AS venta_total, COALESCE(u.nombre, '') AS usuario FROM devoluciones d
+               JOIN ventas v ON v.id = d.venta_id LEFT JOIN usuarios u ON u.id = d.usuario_id
+               WHERE d.fecha >= ? AND d.fecha < ? ORDER BY d.id DESC""",
+            (inicio, fin),
+        ):
+            filas.append([dv["venta_id"], dv["fecha"], "Devolución parcial", dv["total_cent"], dv["venta_total"], dv["motivo"], dv["usuario"]])
         columnas = [("Venta N°", "entero"), ("Fecha", "fecha"), ("Tipo", "texto"), ("Importe", "dinero"),
                     ("Total de la venta", "dinero"), ("Motivo", "texto"), ("Usuario", "texto")]
         return Reporte("Devoluciones y descuentos", columnas, filas)

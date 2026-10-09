@@ -370,3 +370,20 @@ def test_los_datos_persisten_al_reabrir(ctx, producto, tmp_path):
     assert not otro.puede("vender")  # sin sesión no hay permisos
     otro.db.cerrar()
     ctx.db.abrir()
+
+
+def test_los_datos_del_nombre_anterior_se_conservan(tmp_path, monkeypatch):
+    from micomercio import rutas
+
+    monkeypatch.delenv("EXAPYME_DATOS", raising=False)
+    monkeypatch.delenv("MICOMERCIO_DATOS", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    vieja = tmp_path / "MiComercio"
+    (vieja / "copias").mkdir(parents=True)
+    (vieja / "micomercio.db").write_bytes(b"datos del comercio")
+    assert rutas.carpeta_datos() == tmp_path / "ExaPyme" and not vieja.exists()
+    assert rutas.ruta_base_datos().read_bytes() == b"datos del comercio"
+    assert rutas.carpeta_datos() == tmp_path / "ExaPyme"            # la segunda vez no cambia nada
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "nueva_pc"))
+    assert rutas.carpeta_datos() == tmp_path / "nueva_pc" / "ExaPyme"   # instalación nueva

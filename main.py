@@ -1,4 +1,4 @@
-"""Punto de entrada de MiComercio (también es el script que empaqueta PyInstaller)."""
+"""Punto de entrada de Exa Pyme (también es el script que empaqueta PyInstaller)."""
 import sys
 
 if __name__ == "__main__":

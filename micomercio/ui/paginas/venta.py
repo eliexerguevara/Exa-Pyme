@@ -108,6 +108,74 @@ class DialogoCobro(Dialogo):
         self.accept()
 
 
+class DialogoPagoCombinado(Dialogo):
+    """Reparte el total de la venta entre varios medios de pago. Devuelve los pagos en .pagos"""
+
+    def __init__(self, padre, total_cent: int, con_qr: bool = False):
+        super().__init__(padre, "Pago combinado", "Confirmar venta", 560)
+        self.total_cent, self.pagos, self.usar_qr = total_cent, [], False
+        total = etiqueta(fmt_dinero(total_cent), "total")
+        total.setAlignment(Qt.AlignCenter)
+        self.cuerpo.insertWidget(0, etiqueta("Total a cobrar", "suave"))
+        self.cuerpo.insertWidget(1, total)
+        self.cuerpo.insertWidget(2, etiqueta(
+            "Escribí cuánto paga el cliente con cada medio. «Resto» completa lo que falta.", "suave", True))
+        self.campos: dict[str, CampoDecimal] = {}
+        self.estados: dict[str, QComboBox] = {}
+        for medio, nombre in MEDIOS.items():
+            campo = CampoDecimal(nombre, dinero=True, opcional=True)
+            campo.setPlaceholderText("0,00")
+            campo.textEdited.connect(lambda _: self.actualizar())
+            self.campos[medio] = campo
+            elementos = [campo, boton("Resto", lambda m=medio: self.resto(m))]
+            if medio in ("transferencia", "mercadopago"):
+                estado = QComboBox()
+                if medio == "mercadopago" and con_qr:
+                    estado.addItem("Cobrar con QR (se confirma solo)", "qr")
+                estado.addItem("Pendiente de verificar", "pendiente")
+                estado.addItem("Ya verifiqué que ingresó", "confirmado")
+                self.estados[medio] = estado
+                elementos.append(estado)
+            elementos.append(None)
+            self.formulario.addRow(f"{nombre} ($):", fila(*elementos))
+        self.falta = etiqueta("", "grande")
+        self.formulario.addRow("Falta asignar:", self.falta)
+        self.terminar()
+        self.actualizar()
+        self.campos["efectivo"].setFocus()
+
+    def _asignado(self, excepto: str | None = None) -> int:
+        return sum(a_centavos(c.valor_o() or 0) for m, c in self.campos.items() if m != excepto)
+
+    def resto(self, medio: str) -> None:
+        self.campos[medio].poner(de_centavos(max(0, self.total_cent - self._asignado(medio))))
+        self.actualizar()
+
+    def actualizar(self) -> None:
+        falta = self.total_cent - self._asignado()
+        if falta == 0:
+            self.falta.setText("Nada: está completo")
+            self.falta.setStyleSheet(f"color: {tema.VERDE};")
+        else:
+            self.falta.setText(fmt_dinero(falta) if falta > 0 else f"Sobran {fmt_dinero(-falta)}")
+            self.falta.setStyleSheet(f"color: {tema.ROJO};")
+
+    def guardar(self) -> None:
+        pagos = []
+        for medio, campo in self.campos.items():
+            monto = a_centavos(campo.valor() or 0)
+            if monto <= 0:
+                continue
+            estado = self.estados[medio].currentData() if medio in self.estados else "confirmado"
+            if estado == "qr":
+                self.usar_qr, estado = True, "pendiente"
+            pagos.append({"medio": medio, "monto_cent": monto, "estado": estado})
+        if sum(p["monto_cent"] for p in pagos) != self.total_cent:
+            raise ErrorNegocio("Los importes no suman el total de la venta. Revisá lo que falta asignar.")
+        self.pagos = pagos
+        self.accept()
+
+
 class DialogoDescuento(Dialogo):
     def __init__(self, padre, bruto_cent: int, maximo_pct: Decimal, actual: tuple[str, Decimal] | None):
         super().__init__(padre, "Descuento", "Aplicar", 400)
@@ -277,6 +345,12 @@ class PaginaVenta(Pagina):
             atajo = QShortcut(QKeySequence(tecla), self)
             atajo.activated.connect(lambda m=medio: self.cobrar(m))
         vd.addLayout(cobros)
+        self.b_combinado = boton("Pago combinado  (F9)", lambda: self.cobrar("combinado"),
+                                 ayuda="Para cobrar una venta con dos o más medios de pago.")
+        self.b_combinado.setMinimumHeight(40)
+        vd.addWidget(self.b_combinado)
+        self.botones_cobro.append(self.b_combinado)
+        QShortcut(QKeySequence("F9"), self).activated.connect(lambda: self.cobrar("combinado"))
 
         self.cuerpo.addLayout(fila(izquierda, derecha, espacio=16), 1)
 
@@ -504,7 +578,13 @@ class PaginaVenta(Pagina):
         self.actualizar_botones()
         try:
             pagos, vuelto, pendiente, usar_qr = [], 0, False, False
-            if t["total_cent"] > 0:
+            if t["total_cent"] > 0 and medio == "combinado":
+                dialogo = DialogoPagoCombinado(self, t["total_cent"], mercadopago.crear_servicio(self.ctx).estado().disponible)
+                if not dialogo.exec():
+                    return
+                pagos, usar_qr = dialogo.pagos, dialogo.usar_qr
+                pendiente = any(p["estado"] == "pendiente" for p in pagos)
+            elif t["total_cent"] > 0:
                 con_qr = medio == "mercadopago" and mercadopago.crear_servicio(self.ctx).estado().disponible
                 dialogo = DialogoCobro(self, medio, t["total_cent"], **({"con_qr": True} if con_qr else {}))
                 if not dialogo.exec():
@@ -543,7 +623,8 @@ class PaginaVenta(Pagina):
 
     def cobrar_con_qr(self, venta_id: int) -> bool:
         """Muestra el QR y espera a Mercado Pago. Devuelve True si la venta quedó sin cobrar o pendiente."""
-        pago_id = self.ctx.ventas.pagos(venta_id)[0]["id"]
+        pago_id = next(p["id"] for p in self.ctx.ventas.pagos(venta_id)
+                       if p["medio"] == "mercadopago" and p["estado"] == "pendiente")
         dialogo = DialogoCobroQR(self, self.ctx, venta_id, pago_id)
         dialogo.exec()
         if dialogo.resultado == "otra_forma" and self.ctx.ventas.saldo(venta_id) > 0:

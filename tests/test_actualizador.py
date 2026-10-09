@@ -12,7 +12,7 @@ EXE = b"MZ" + b"contenido del programa nuevo" * 1000
 BASE = act.PREFIJO_DESCARGAS + "v1.2.0/"
 
 
-def publicacion(etiqueta="v1.2.0", archivos=("MiComercio.exe", "MiComercio.exe.sha256"), base=BASE, **extra):
+def publicacion(etiqueta="v1.2.0", archivos=("ExaPyme.exe", "ExaPyme.exe.sha256"), base=BASE, **extra):
     datos = {"tag_name": etiqueta, "body": "Mejoras varias", "draft": False, "prerelease": False,
              "assets": [{"name": n, "browser_download_url": base + n, "size": len(EXE)} for n in archivos]}
     datos.update(extra)
@@ -36,13 +36,13 @@ def test_comparacion_de_versiones():
 
 def test_detecta_version_nueva():
     a = act.buscar("1.1.0", publicacion())
-    assert (a.version, a.notas, a.url_exe) == ("1.2.0", "Mejoras varias", BASE + "MiComercio.exe")
+    assert (a.version, a.notas, a.url_exe) == ("1.2.0", "Mejoras varias", BASE + "ExaPyme.exe")
     assert act.buscar("1.2.0", publicacion()) is None           # ya está al día
     assert act.buscar("2.0.0", publicacion()) is None           # nunca vuelve a una versión anterior
 
 
 def test_ignora_publicaciones_que_no_sirven():
-    assert act.buscar("1.0.0", publicacion(archivos=("MiComercio.exe",))) is None          # sin suma de verificación
+    assert act.buscar("1.0.0", publicacion(archivos=("ExaPyme.exe",))) is None          # sin suma de verificación
     assert act.buscar("1.0.0", publicacion(prerelease=True)) is None
     assert act.buscar("1.0.0", publicacion(base="https://otro-sitio.example/")) is None    # descarga fuera del repositorio
 
@@ -60,7 +60,7 @@ def test_ignora_publicaciones_que_no_sirven():
 
 def test_descarga_verifica_la_suma(tmp_path):
     a = act.buscar("1.1.0", publicacion())
-    correcta = hashlib.sha256(EXE).hexdigest().encode() + b"  MiComercio.exe\n"
+    correcta = hashlib.sha256(EXE).hexdigest().encode() + b"  ExaPyme.exe\n"
     avances = []
     destino = act.descargar(a, tmp_path / "nuevo.exe", lambda h, t: avances.append((h, t)),
                             obtener=lambda url: correcta, abrir=lambda pedido, timeout: Respuesta(EXE))
@@ -73,12 +73,12 @@ def test_descarga_verifica_la_suma(tmp_path):
 
 
 def test_instalar_reemplaza_y_conserva_el_anterior(tmp_path):
-    exe, nuevo = tmp_path / "MiComercio.exe", tmp_path / "MiComercio.exe.nuevo"
+    exe, nuevo = tmp_path / "ExaPyme.exe", tmp_path / "ExaPyme.exe.nuevo"
     exe.write_bytes(b"viejo")
     nuevo.write_bytes(b"nuevo")
     act.instalar(nuevo, exe)
     assert exe.read_bytes() == b"nuevo" and not nuevo.exists()
-    assert (tmp_path / "MiComercio.exe.anterior").read_bytes() == b"viejo"
+    assert (tmp_path / "ExaPyme.exe.anterior").read_bytes() == b"viejo"
 
     with pytest.raises(ErrorNegocio):                           # falta el archivo nuevo: se deshace
         act.instalar(tmp_path / "no-existe", exe)

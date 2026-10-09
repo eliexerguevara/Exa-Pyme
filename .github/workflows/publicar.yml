@@ -1,4 +1,4 @@
-# Al subir una etiqueta vX.Y.Z, prueba el programa, genera MiComercio.exe en Windows
+# Al subir una etiqueta vX.Y.Z, prueba el programa, genera ExaPyme.exe en Windows
 # y lo publica como una versión (release). De ahí lo descargan los usuarios y el botón Update.
 name: Publicar versión
 
@@ -34,11 +34,14 @@ jobs:
       - name: Calcular la suma de verificación
         shell: pwsh
         run: |
-          $suma = (Get-FileHash dist\MiComercio.exe -Algorithm SHA256).Hash.ToLower()
+          $suma = (Get-FileHash dist\ExaPyme.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist\ExaPyme.exe.sha256 -Value "$suma  ExaPyme.exe" -Encoding ascii
+          # El programa se llamaba MiComercio: las instalaciones con ese nombre buscan estos archivos para actualizarse.
+          Copy-Item dist\ExaPyme.exe dist\MiComercio.exe
           Set-Content -Path dist\MiComercio.exe.sha256 -Value "$suma  MiComercio.exe" -Encoding ascii
 
       - name: Publicar la versión
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/MiComercio.exe dist/MiComercio.exe.sha256 --title "MiComercio ${{ github.ref_name }}" --notes-file NOVEDADES.md
+        run: gh release create "${{ github.ref_name }}" dist/ExaPyme.exe dist/ExaPyme.exe.sha256 dist/MiComercio.exe dist/MiComercio.exe.sha256 --title "Exa Pyme ${{ github.ref_name }}" --notes-file NOVEDADES.md

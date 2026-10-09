@@ -73,7 +73,9 @@ def html_comprobante(ctx, comprobante_id: int) -> str:
     if receptor.get("domicilio"):
         p.append(f"Domicilio: {escape(receptor['domicilio'])}<br>")
     p.append("<hr><table width='100%'>")
-    for i in ctx.ventas.items(c["venta_id"]):
+    # Una nota de crédito parcial detalla solo lo devuelto.
+    renglones = json.loads(c["devolucion_json"])["lineas"] if c["parcial"] else ctx.ventas.items(c["venta_id"])
+    for i in renglones:
         # En A los precios van sin IVA (se discrimina abajo); en B y C van finales.
         precio, importe = i["precio_unit_cent"], i["total_cent"]
         if letra == "A":

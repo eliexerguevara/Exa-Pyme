@@ -131,8 +131,8 @@ class VentanaPrincipal(QMainWindow):
         self.reloj_primera_consulta = QTimer(self)
         self.reloj_primera_consulta.setSingleShot(True)
         self.reloj_primera_consulta.timeout.connect(lambda: self.actualizaciones.buscar())
-        # MICOMERCIO_SIN_ACTUALIZACIONES=1 evita la consulta automática (pruebas, equipos sin Internet).
-        if ctx.puede("configuracion") and not os.environ.get("MICOMERCIO_SIN_ACTUALIZACIONES"):
+        # EXAPYME_SIN_ACTUALIZACIONES=1 evita la consulta automática (pruebas, equipos sin Internet).
+        if ctx.puede("configuracion") and not os.environ.get("EXAPYME_SIN_ACTUALIZACIONES"):
             self.reloj_primera_consulta.start(4000)
             self.reloj_actualizaciones.start(6 * 60 * 60 * 1000)
 
@@ -157,7 +157,7 @@ class VentanaPrincipal(QMainWindow):
         visible = actualizacion is not None and self.ctx.puede("configuracion")
         if visible:
             self.boton_update.setText(f"Update  ·  versión {actualizacion.version}")
-            self.boton_update.setToolTip("Hay una versión nueva de MiComercio. Hacé clic para actualizar.")
+            self.boton_update.setToolTip("Hay una versión nueva de Exa Pyme. Hacé clic para actualizar.")
         self.boton_update.setVisible(visible)
 
     def copia_automatica(self) -> None:

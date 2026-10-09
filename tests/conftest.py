@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["MICOMERCIO_SIN_ACTUALIZACIONES"] = "1"  # las pruebas no consultan GitHub
+os.environ["EXAPYME_SIN_ACTUALIZACIONES"] = "1"  # las pruebas no consultan GitHub
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -39,7 +39,7 @@ def app():
 
 @pytest.fixture
 def ctx(tmp_path, monkeypatch):
-    monkeypatch.setenv("MICOMERCIO_DATOS", str(tmp_path / "datos"))
+    monkeypatch.setenv("EXAPYME_DATOS", str(tmp_path / "datos"))
     db = BaseDatos(tmp_path / "datos" / "micomercio.db")
     contexto = Contexto(db)
     contexto.usuarios.crear("admin", "Administrador", "clave-de-prueba")

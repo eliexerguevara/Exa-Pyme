@@ -1,4 +1,4 @@
-- Cobro con QR de Mercado Pago: el programa genera el cobro por el importe exacto y lo confirma solo cuando Mercado Pago avisa que se acreditó.
-- Se configura desde Configuración → Mercado Pago (viene desactivado).
-- Desde Historial de ventas se puede verificar en Mercado Pago un pago que quedó pendiente.
-- Corrección: los importes de tickets y facturas ahora salen alineados a la derecha.
+- El programa ahora se llama Exa Pyme. Tus datos se conservan.
+- Pago combinado: una venta se puede cobrar con dos o más medios de pago (botón «Pago combinado», F9).
+- Devoluciones parciales: desde el detalle de una venta se pueden devolver solo algunos productos; vuelven al stock y el dinero se registra en la caja.
+- Si la venta tiene factura de ARCA, la devolución emite la nota de crédito por lo devuelto.

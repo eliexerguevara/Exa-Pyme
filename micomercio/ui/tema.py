@@ -100,7 +100,7 @@ QScrollBar::handle:horizontal {{ background: #C5CBD6; border-radius: 4px; min-wi
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 """
 
-# Íconos de línea propios (24 x 24), dibujados para MiComercio.
+# Íconos de línea propios (24 x 24), dibujados para Exa Pyme.
 _SVG = {
     "inicio": "<path d='M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z'/>",
     "venta": "<circle cx='9' cy='20' r='1.4'/><circle cx='17' cy='20' r='1.4'/><path d='M3 4h2.5l2.2 11h10.2l2-8H7'/>",
@@ -143,7 +143,7 @@ def icono_aplicacion() -> QIcon:
     svg = (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
         f"<rect width='64' height='64' rx='14' fill='{AZUL}'/>"
-        "<path d='M16 44V22l16 14 16-14v22' fill='none' stroke='white' stroke-width='6' "
+        "<path d='M42 20H24v24h18M24 32h14' fill='none' stroke='white' stroke-width='6' "
         "stroke-linecap='round' stroke-linejoin='round'/></svg>"
     )
     render = QSvgRenderer(QByteArray(svg.encode()))

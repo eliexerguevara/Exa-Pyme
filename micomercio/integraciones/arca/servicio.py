@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from ...core.dinero import fmt_dinero
+from ...core.dinero import D, fmt_dinero
 from ...core.errores import ErrorNegocio
 from ...core.precios import desglosar_centavos
 from ...core.util import ahora, rango_dias
@@ -191,7 +191,7 @@ class ServicioArca:
     def _vigente(self, venta_id: int, clase: str, estados=("autorizada", "pendiente")):
         marcas = ",".join("?" * len(estados))
         return self.db.uno(
-            SELECT + f" WHERE c.venta_id = ? AND c.entorno = ? AND c.clase = ? AND c.estado IN ({marcas}) ORDER BY c.id DESC",
+            SELECT + f" WHERE c.venta_id = ? AND c.entorno = ? AND c.clase = ? AND c.parcial = 0 AND c.estado IN ({marcas}) ORDER BY c.id DESC",
             (venta_id, self.entorno, clase, *estados),
         )
 
@@ -213,7 +213,9 @@ class ServicioArca:
         ):
             comprobantes = self.comprobantes(v["id"])
             factura = next((c for c in reversed(comprobantes) if c["clase"] == "factura" and c["estado"] != "rechazada"), None)
-            nota = next((c for c in reversed(comprobantes) if c["clase"] == "nota_credito" and c["estado"] != "rechazada"), None)
+            nota = next((c for c in reversed(comprobantes)
+                         if c["clase"] == "nota_credito" and c["estado"] != "rechazada" and not c["parcial"]), None)
+            parciales = [c for c in comprobantes if c["parcial"] and c["estado"] == "autorizada"]
             rechazada = next((c for c in reversed(comprobantes) if c["estado"] == "rechazada"), None)
             if nota is not None and nota["estado"] == "autorizada":
                 situacion, texto = "nota_credito", f"Anulada con nota de crédito {numero_completo(nota)}"
@@ -221,6 +223,8 @@ class ServicioArca:
                 situacion, texto = "pendiente", "Nota de crédito pendiente de autorización"
             elif factura is not None and factura["estado"] == "autorizada":
                 situacion, texto = "autorizada", f"Factura {numero_completo(factura)}"
+                if parciales:
+                    texto += f" · {len(parciales)} nota(s) de crédito parcial(es)"
             elif factura is not None:
                 situacion, texto = "pendiente", "Factura pendiente de autorización"
             elif rechazada is not None:
@@ -228,6 +232,7 @@ class ServicioArca:
             else:
                 situacion, texto = "sin_comprobante", "Sin comprobante fiscal"
             filas.append({**dict(v), "situacion": situacion, "texto": texto, "factura": factura, "nota": nota,
+                          "parciales": parciales,
                           "motivo": rechazada["respuesta"] if rechazada is not None and situacion == "rechazada" else ""})
         return filas
 
@@ -258,7 +263,10 @@ class ServicioArca:
         c = self.obtener(comprobante_id)
         if c["estado"] != "pendiente":
             return c
-        return self._resolver(comprobante_id)
+        c = self._resolver(comprobante_id)
+        if c["parcial"] and c["devolucion_id"] is None:
+            c = self._completar_parcial(c)  # la nota quedó autorizada: falta registrar la devolución
+        return c
 
     def descartar_pendiente(self, comprobante_id: int) -> None:
         """Descarta un comprobante pendiente que nunca llegó a enviarse a ARCA (todavía no tiene número).
@@ -372,6 +380,12 @@ class ServicioArca:
         factura = self._vigente(venta_id, "factura", ("autorizada",))
         if factura is None:
             raise ErrorNegocio("Esta venta no tiene una factura autorizada en este entorno.")
+        if self.db.uno("SELECT 1 FROM comprobantes_fiscales WHERE venta_id = ? AND entorno = ? AND parcial = 1 "
+                       "AND estado IN ('autorizada', 'pendiente')", (venta_id, self.entorno)):
+            raise ErrorNegocio(
+                "Esta venta ya tiene notas de crédito parciales. Para devolver lo que queda, registrá otra devolución "
+                "desde Historial de ventas con los productos restantes."
+            )
         v = self.ctx.ventas.obtener(venta_id)
         real = self.entorno == "produccion"
         if real and v["estado"] == "completada" and v["cobrado_cent"] > 0:
@@ -398,3 +412,75 @@ class ServicioArca:
             with self.db.transaccion():
                 self._marcar_venta(venta_id, "nota_credito")
         return nota
+
+    # ---- nota de crédito parcial (devolución de algunos productos) ---------
+    def nota_credito_parcial(self, venta_id: int, cantidades: dict, motivo: str, medio: str = "efectivo"):
+        """Emite una nota de crédito por los productos devueltos y, cuando ARCA la autoriza, registra la devolución.
+
+        Solo corresponde en producción y con la venta facturada. Si un corte dejó una nota autorizada sin su
+        devolución registrada, se completa esa en lugar de emitir otra.
+        """
+        self.ctx.requiere("anular")
+        self._requerir_disponible()
+        motivo = (motivo or "").strip()
+        if not motivo:
+            raise ErrorNegocio("Escribí el motivo de la devolución.")
+        if self.entorno != "produccion":
+            raise ErrorNegocio("En homologación las devoluciones se registran sin nota de crédito.")
+        factura = self._vigente(venta_id, "factura", ("autorizada",))
+        if factura is None:
+            raise ErrorNegocio("Esta venta no tiene una factura autorizada.")
+        colgada = self.db.uno(
+            SELECT + """ WHERE c.venta_id = ? AND c.entorno = ? AND c.parcial = 1 AND c.devolucion_id IS NULL
+                         AND c.estado IN ('autorizada', 'pendiente') ORDER BY c.id""",
+            (venta_id, self.entorno),
+        )
+        if colgada is not None:
+            if colgada["estado"] == "pendiente":
+                colgada = self._resolver(colgada["id"])
+            return self._completar_parcial(colgada)
+
+        self.ctx.ventas.validar_devolucion(venta_id, medio, con_nota_credito=True)
+        calculo = self.ctx.ventas.calcular_devolucion(venta_id, cantidades)
+        if calculo["total_cent"] <= 0:
+            raise ErrorNegocio("La devolución no tiene importe: no corresponde una nota de crédito.")
+        alicuotas, neto, iva = [], 0, 0
+        if factura["letra"] == "C":
+            neto = calculo["total_cent"]
+        else:
+            por_alicuota: dict[str, int] = {}
+            for l in calculo["lineas"]:
+                por_alicuota[l["impuesto_pct"]] = por_alicuota.get(l["impuesto_pct"], 0) + l["total_cent"]
+            for pct, total in sorted(por_alicuota.items(), key=lambda par: float(par[0])):
+                if total == 0:
+                    continue
+                base, importe = desglosar_centavos(total, pct)
+                alicuotas.append([ALICUOTAS_IVA[pct], base, importe])
+                neto += base
+                iva += importe
+        datos = {
+            "venta_id": venta_id, "letra": factura["letra"], "punto_venta": int(factura["punto_venta"]),
+            "doc_tipo": factura["doc_tipo"], "doc_nro": factura["doc_nro"], "condicion_receptor": factura["condicion_receptor"],
+            "total_cent": calculo["total_cent"], "neto_cent": neto, "iva_cent": iva, "alicuotas": alicuotas,
+            "receptor": json.loads(factura["receptor"]), "emisor": json.loads(factura["emisor"]),
+        }
+        detalle = {"cantidades": {str(k): str(v) for k, v in cantidades.items()}, "motivo": motivo, "medio": medio,
+                   "lineas": calculo["lineas"]}
+        with self.db.transaccion():
+            nota_id = self._insertar(datos, "nota_credito", factura["id"])
+            self.db.ejecutar("UPDATE comprobantes_fiscales SET parcial = 1, devolucion_json = ? WHERE id = ?",
+                             (json.dumps(detalle, ensure_ascii=False), nota_id))
+        return self._completar_parcial(self._resolver(nota_id))
+
+    def _completar_parcial(self, nota):
+        """Registra la devolución que corresponde a una nota de crédito parcial ya autorizada."""
+        if nota["estado"] != "autorizada":
+            raise ErrorNegocio("La nota de crédito todavía no fue autorizada por ARCA.")
+        detalle = json.loads(nota["devolucion_json"])
+        devolucion_id = self.ctx.ventas.devolver(
+            nota["venta_id"], {int(k): D(v) for k, v in detalle["cantidades"].items()},
+            f"{detalle['motivo']} (nota de crédito {numero_completo(nota)})", detalle["medio"], con_nota_credito=True,
+        )
+        with self.db.transaccion():
+            self.db.ejecutar("UPDATE comprobantes_fiscales SET devolucion_id = ? WHERE id = ?", (devolucion_id, nota["id"]))
+        return self.obtener(nota["id"])

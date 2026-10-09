@@ -66,7 +66,7 @@ class PaginaCopias(Pagina):
 
     def restaurar_archivo(self) -> None:
         ruta, _ = QFileDialog.getOpenFileName(self, "Elegir copia de seguridad", str(self.ctx.copias.carpeta()),
-                                              "Copias de MiComercio (*.db)")
+                                              "Copias de Exa Pyme (*.db)")
         if ruta:
             self.restaurar(ruta)
 
@@ -82,5 +82,5 @@ class PaginaCopias(Pagina):
             return
         resultado = self.ctx.copias.restaurar(ruta)
         informar(self, "La copia se restauró correctamente.\n\nLos datos anteriores quedaron guardados en:\n"
-                       f"{resultado['resguardo']}\n\nMiComercio se va a cerrar. Volvé a abrirlo para seguir trabajando.")
+                       f"{resultado['resguardo']}\n\nExa Pyme se va a cerrar. Volvé a abrirlo para seguir trabajando.")
         self.ventana.cerrar_sin_copia()

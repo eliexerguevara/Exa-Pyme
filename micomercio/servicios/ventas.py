@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
-from ..core.dinero import D, a_milesimas, fmt_dinero, fmt_pct, importe_linea
+from ..core.dinero import D, a_milesimas, fmt_cantidad, fmt_dinero, fmt_pct, importe_linea
 from ..core.errores import ErrorNegocio
 from ..core.precios import desglosar_centavos
 from ..core.util import ahora, rango_dias
@@ -295,32 +295,166 @@ class Ventas:
                     "crédito desde Facturación."
                 )
             fecha = ahora()
-            confirmados = self.db.consultar(
-                "SELECT * FROM pagos WHERE venta_id = ? AND tipo = 'cobro' AND estado = 'confirmado'", (venta_id,)
-            )
-            if confirmados:
+            # Se devuelve lo cobrado que todavía no se devolvió (puede haber devoluciones parciales previas).
+            cobrado, devuelto = {}, {}
+            for pago in self.db.consultar(
+                "SELECT tipo, medio, monto_cent FROM pagos WHERE venta_id = ? AND estado = 'confirmado' ORDER BY id", (venta_id,)
+            ):
+                destino = cobrado if pago["tipo"] == "cobro" else devuelto
+                destino[pago["medio"]] = destino.get(pago["medio"], 0) + pago["monto_cent"]
+            restante = sum(cobrado.values()) - sum(devuelto.values())
+            if restante > 0:
                 caja = self.ctx.caja.requerir_abierta()
-                for pago in confirmados:
-                    self.db.ejecutar(
-                        """INSERT INTO pagos (venta_id, tipo, medio, monto_cent, estado, referencia, creado_en,
-                           confirmado_en, caja_id, usuario_id) VALUES (?, 'devolucion', ?, ?, 'confirmado', ?, ?, ?, ?, ?)""",
-                        (venta_id, pago["medio"], pago["monto_cent"], f"Anulación de venta N° {venta_id}",
-                         fecha, fecha, caja["id"], self.ctx.usuario_id),
-                    )
+                for medio in cobrado:
+                    monto = min(max(cobrado[medio] - devuelto.get(medio, 0), 0), restante)
+                    if monto > 0:
+                        self._insertar_devolucion_pago(venta_id, medio, monto, f"Anulación de venta N° {venta_id}", caja["id"], fecha)
+                        restante -= monto
+                if restante > 0:  # devoluciones previas hechas por otro medio
+                    medio = next(iter(cobrado))
+                    self._insertar_devolucion_pago(venta_id, medio, restante, f"Anulación de venta N° {venta_id}", caja["id"], fecha)
             self.db.ejecutar(
                 "UPDATE pagos SET estado = 'cancelado' WHERE venta_id = ? AND tipo = 'cobro' AND estado = 'pendiente'",
                 (venta_id,),
             )
+            ya_devuelto = self.devuelto(venta_id)
             for item in self.items(venta_id):
-                self.ctx.inventario.mover(
-                    item["producto_id"], item["cantidad_mil"], "anulacion", f"Anulación de venta N° {venta_id}",
-                    "venta", venta_id, item["costo_unit_cent"],
-                )
+                cantidad = item["cantidad_mil"] - ya_devuelto.get(item["id"], {}).get("cantidad_mil", 0)
+                if cantidad > 0:
+                    self.ctx.inventario.mover(
+                        item["producto_id"], cantidad, "anulacion", f"Anulación de venta N° {venta_id}",
+                        "venta", venta_id, item["costo_unit_cent"],
+                    )
             self.db.ejecutar(
                 "UPDATE ventas SET estado = 'anulada', anulada_en = ?, anulada_por = ?, motivo_anulacion = ? WHERE id = ?",
                 (fecha, self.ctx.usuario_id, motivo, venta_id),
             )
             self.ctx.auditar("venta_anulada", "ventas", venta_id, f"{fmt_dinero(v['total_cent'])}: {motivo}")
+
+    def _insertar_devolucion_pago(self, venta_id: int, medio: str, monto_cent: int, referencia: str, caja_id: int, fecha: str) -> None:
+        self.db.ejecutar(
+            """INSERT INTO pagos (venta_id, tipo, medio, monto_cent, estado, referencia, creado_en,
+               confirmado_en, caja_id, usuario_id) VALUES (?, 'devolucion', ?, ?, 'confirmado', ?, ?, ?, ?, ?)""",
+            (venta_id, medio, monto_cent, referencia, fecha, fecha, caja_id, self.ctx.usuario_id),
+        )
+
+    # ---- devoluciones parciales -----------------------------------------
+    def devuelto(self, venta_id: int) -> dict[int, dict]:
+        """Lo ya devuelto de cada renglón de la venta: {venta_item_id: {cantidad_mil, total_cent}}"""
+        return {
+            f["venta_item_id"]: {"cantidad_mil": f["cantidad"], "total_cent": f["total"]}
+            for f in self.db.consultar(
+                """SELECT di.venta_item_id, SUM(di.cantidad_mil) AS cantidad, SUM(di.total_cent) AS total
+                   FROM devolucion_items di JOIN devoluciones d ON d.id = di.devolucion_id
+                   WHERE d.venta_id = ? GROUP BY di.venta_item_id""",
+                (venta_id,),
+            )
+        }
+
+    def devoluciones(self, venta_id: int):
+        return self.db.consultar(
+            """SELECT d.*, COALESCE(u.nombre, '') AS usuario FROM devoluciones d
+               LEFT JOIN usuarios u ON u.id = d.usuario_id WHERE d.venta_id = ? ORDER BY d.id""",
+            (venta_id,),
+        )
+
+    def calcular_devolucion(self, venta_id: int, cantidades: dict) -> dict:
+        """Calcula, sin guardar, el importe a devolver. cantidades: {venta_item_id: cantidad a devolver}
+
+        Cada producto se devuelve al precio que realmente se pagó (con el descuento de la venta ya aplicado).
+        """
+        items = {i["id"]: i for i in self.items(venta_id)}
+        previo = self.devuelto(venta_id)
+        lineas = []
+        for item_id, cantidad in cantidades.items():
+            cantidad_mil = a_milesimas(D(cantidad))
+            if cantidad_mil == 0:
+                continue
+            item = items.get(int(item_id))
+            if item is None:
+                raise ErrorNegocio("Uno de los productos no pertenece a esta venta.")
+            if cantidad_mil < 0:
+                raise ErrorNegocio("La cantidad a devolver no puede ser negativa.")
+            ya = previo.get(item["id"], {"cantidad_mil": 0, "total_cent": 0})
+            disponible = item["cantidad_mil"] - ya["cantidad_mil"]
+            if cantidad_mil > disponible:
+                raise ErrorNegocio(
+                    f"De «{item['nombre']}» quedan {fmt_cantidad(disponible)} para devolver "
+                    f"(se vendieron {fmt_cantidad(item['cantidad_mil'])})."
+                )
+            resto = item["total_cent"] - ya["total_cent"]
+            if cantidad_mil == disponible:
+                total = resto  # lo último que queda: así no se pierde ni sobra un centavo
+            else:
+                total = int((Decimal(item["total_cent"]) * cantidad_mil / item["cantidad_mil"]).quantize(Decimal(1), ROUND_HALF_UP))
+                total = min(total, resto)
+            neto, impuesto = desglosar_centavos(total, item["impuesto_pct"])
+            lineas.append({
+                "venta_item_id": item["id"], "producto_id": item["producto_id"], "codigo": item["codigo"],
+                "nombre": item["nombre"], "unidad": item["unidad"], "cantidad_mil": cantidad_mil,
+                "precio_unit_cent": item["precio_unit_cent"], "impuesto_pct": item["impuesto_pct"],
+                "costo_unit_cent": item["costo_unit_cent"], "total_cent": total, "neto_cent": neto, "impuesto_cent": impuesto,
+            })
+        if not lineas:
+            raise ErrorNegocio("Indicá qué productos se devuelven y en qué cantidad.")
+        return {
+            "lineas": lineas, "total_cent": sum(l["total_cent"] for l in lineas), "neto_cent": sum(l["neto_cent"] for l in lineas),
+            "impuestos_cent": sum(l["impuesto_cent"] for l in lineas),
+            "costo_cent": sum(importe_linea(l["costo_unit_cent"], l["cantidad_mil"]) for l in lineas),
+        }
+
+    def validar_devolucion(self, venta_id: int, medio: str, con_nota_credito: bool = False):
+        """Comprueba que la venta admite una devolución parcial. Devuelve la caja abierta."""
+        self.ctx.requiere("anular")
+        if medio not in MEDIOS:
+            raise ErrorNegocio("El medio de devolución no es válido.")
+        v = self.obtener(venta_id)
+        if v["estado"] != "completada":
+            raise ErrorNegocio("No se puede devolver productos de una venta anulada.")
+        if v["estado_fiscal"] == "pendiente":
+            raise ErrorNegocio("Esta venta tiene una factura pendiente de autorización. Resolvela primero desde Facturación.")
+        if v["estado_fiscal"] == "autorizada" and not con_nota_credito:
+            raise ErrorNegocio("Esta venta tiene una factura autorizada por ARCA: la devolución necesita una nota de crédito.")
+        if estado_pago(v) != "pagada":
+            raise ErrorNegocio(
+                "Para registrar una devolución, la venta tiene que estar cobrada. Si todavía no se cobró, "
+                "confirmá el pago o anulá la venta completa."
+            )
+        return self.ctx.caja.requerir_abierta()
+
+    def devolver(self, venta_id: int, cantidades: dict, motivo: str, medio: str = "efectivo",
+                 con_nota_credito: bool = False) -> int:
+        """Registra la devolución de parte de una venta: los productos vuelven al stock y el dinero
+        sale por el medio indicado, en la caja abierta. La venta sigue vigente por lo no devuelto."""
+        motivo = (motivo or "").strip()
+        if not motivo:
+            raise ErrorNegocio("Escribí el motivo de la devolución.")
+        with self.db.transaccion():
+            caja = self.validar_devolucion(venta_id, medio, con_nota_credito)
+            c = self.calcular_devolucion(venta_id, cantidades)
+            fecha = ahora()
+            devolucion_id = self.db.ejecutar(
+                """INSERT INTO devoluciones (venta_id, fecha, caja_id, usuario_id, motivo, medio, total_cent, neto_cent,
+                   impuestos_cent, costo_cent) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (venta_id, fecha, caja["id"], self.ctx.usuario_id, motivo, medio, c["total_cent"], c["neto_cent"],
+                 c["impuestos_cent"], c["costo_cent"]),
+            ).lastrowid
+            for l in c["lineas"]:
+                self.db.ejecutar(
+                    """INSERT INTO devolucion_items (devolucion_id, venta_item_id, producto_id, cantidad_mil, total_cent,
+                       neto_cent, impuesto_cent) VALUES (?,?,?,?,?,?,?)""",
+                    (devolucion_id, l["venta_item_id"], l["producto_id"], l["cantidad_mil"], l["total_cent"],
+                     l["neto_cent"], l["impuesto_cent"]),
+                )
+                self.ctx.inventario.mover(
+                    l["producto_id"], l["cantidad_mil"], "devolucion", f"Devolución de venta N° {venta_id}",
+                    "devolucion", devolucion_id, l["costo_unit_cent"],
+                )
+            if c["total_cent"] > 0:
+                self._insertar_devolucion_pago(venta_id, medio, c["total_cent"], f"Devolución parcial N° {devolucion_id}",
+                                               caja["id"], fecha)
+            self.ctx.auditar("devolucion_parcial", "ventas", venta_id, f"{fmt_dinero(c['total_cent'])}: {motivo}")
+        return devolucion_id
 
     # ---- consultas -------------------------------------------------------
     def obtener(self, venta_id: int):

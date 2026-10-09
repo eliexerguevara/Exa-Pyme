@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QComboBox, QDialog, QLineEdit, QVBoxLayout
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QLineEdit, QVBoxLayout
 
-from ...core.dinero import a_centavos, de_centavos, fmt_cantidad, fmt_dinero
+from ...core.dinero import a_centavos, de_centavos, de_milesimas, fmt_cantidad, fmt_dinero
 from ...core.errores import ErrorNegocio
 from ...integraciones import mercadopago
 from ...servicios import tickets
@@ -75,6 +76,85 @@ class DialogoNuevoCobro(Dialogo):
         self.accept()
 
 
+class DialogoDevolucion(Dialogo):
+    """Devolución de algunos productos de una venta. La venta sigue vigente por lo que no se devuelve."""
+
+    def __init__(self, padre, ctx, venta_id: int):
+        super().__init__(padre, f"Devolver productos de la venta N° {venta_id}", "Registrar devolución", 620)
+        self.ctx, self.venta_id, self.nota = ctx, venta_id, None
+        self.venta = ctx.ventas.obtener(venta_id)
+        self.facturada = self.venta["estado_fiscal"] == "autorizada"
+        texto = ("Escribí cuántas unidades devuelve el cliente de cada producto. Los productos vuelven al stock y el "
+                 "dinero se registra como devolución en la caja abierta.")
+        if self.facturada:
+            texto += ("\n\nEsta venta tiene factura: al registrar la devolución se emite una NOTA DE CRÉDITO en ARCA "
+                      "por lo devuelto. No se puede deshacer.")
+        self.cuerpo.insertWidget(0, etiqueta(texto, "aviso" if self.facturada else "suave", True))
+        devuelto = ctx.ventas.devuelto(venta_id)
+        self.campos: dict[int, CampoDecimal] = {}
+        for item in ctx.ventas.items(venta_id):
+            queda = item["cantidad_mil"] - devuelto.get(item["id"], {}).get("cantidad_mil", 0)
+            if queda <= 0:
+                continue
+            campo = CampoDecimal(item["nombre"], 3, opcional=True)
+            campo.setPlaceholderText("0")
+            campo.textEdited.connect(lambda _: self.calcular())
+            self.campos[item["id"]] = campo
+            self.formulario.addRow(f"{item['nombre']}  (quedan {fmt_cantidad(queda)} {item['unidad']}):",
+                                   fila(campo, boton("Todo", lambda c=campo, q=queda: self.todo(c, q)), None))
+        self.medio = QComboBox()
+        for clave, nombre in MEDIOS.items():
+            self.medio.addItem(nombre, clave)
+        cobros = [p for p in ctx.ventas.pagos(venta_id) if p["tipo"] == "cobro" and p["estado"] == "confirmado"]
+        if cobros:
+            self.medio.setCurrentIndex(self.medio.findData(cobros[0]["medio"]))
+        self.motivo = QLineEdit()
+        self.importe = etiqueta("$ 0,00", "grande")
+        self.formulario.addRow("Se devuelve el dinero por:", self.medio)
+        self.formulario.addRow("Motivo:", self.motivo)
+        self.formulario.addRow("Importe a devolver:", self.importe)
+        if not self.campos:
+            self.boton_aceptar.setEnabled(False)
+            self.cuerpo.addWidget(etiqueta("Ya se devolvieron todos los productos de esta venta.", "nota"))
+        self.terminar()
+
+    def todo(self, campo, queda_mil: int) -> None:
+        campo.poner(de_milesimas(queda_mil))
+        self.calcular()
+
+    def cantidades(self) -> dict:
+        return {item_id: campo.valor() for item_id, campo in self.campos.items() if campo.valor()}
+
+    def calcular(self) -> None:
+        try:
+            self.importe.setText(fmt_dinero(self.ctx.ventas.calcular_devolucion(self.venta_id, self.cantidades())["total_cent"]))
+            self.importe.setStyleSheet("")
+        except ErrorNegocio as e:
+            self.importe.setText(str(e))
+            self.importe.setStyleSheet(f"color: {tema.ROJO}; font-size: 10pt;")
+
+    def guardar(self) -> None:
+        cantidades = self.cantidades()
+        calculo = self.ctx.ventas.calcular_devolucion(self.venta_id, cantidades)
+        if not self.motivo.text().strip():
+            raise ErrorNegocio("Escribí el motivo de la devolución.")
+        if not confirmar(self, f"Se van a devolver {fmt_dinero(calculo['total_cent'])} por "
+                               f"{self.medio.currentText().lower()}.\n\n¿Registrar la devolución?", "Registrar devolución"):
+            return
+        if self.facturada:
+            from ...integraciones import arca
+
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                self.nota = arca.crear_servicio(self.ctx).nota_credito_parcial(
+                    self.venta_id, cantidades, self.motivo.text(), self.medio.currentData())
+            finally:
+                QApplication.restoreOverrideCursor()
+        else:
+            self.ctx.ventas.devolver(self.venta_id, cantidades, self.motivo.text(), self.medio.currentData())
+        self.accept()
+
+
 class DialogoVenta(QDialog):
     """Detalle de una venta: productos, pagos y acciones sobre los pagos."""
 
@@ -90,7 +170,7 @@ class DialogoVenta(QDialog):
         self.datos = etiqueta("", "suave", True)
         v.addWidget(self.cabecera)
         v.addWidget(self.datos)
-        self.items = Tabla(["Código", "Producto", "Cantidad", "Precio", "Descuento", "Importe"], ordenable=False)
+        self.items = Tabla(["Código", "Producto", "Cantidad", "Devuelto", "Precio", "Descuento", "Importe"], ordenable=False)
         v.addWidget(self.items, 3)
         v.addWidget(etiqueta("Pagos", "subtitulo"))
         self.pagos = Tabla(["Medio", "Tipo", "Importe", "Estado", "Comisión", "N° de operación", "Fecha de cobro"],
@@ -106,7 +186,9 @@ class DialogoVenta(QDialog):
         v.addLayout(fila(self.b_verificar, self.b_confirmar, self.b_rechazar, self.b_cancelar, None))
         v.addLayout(fila(self.b_comision, self.b_cobro, None))
         self.b_anular = boton("Anular venta", self.anular, "peligro")
-        v.addLayout(fila(self.b_anular, None, boton("Ver / imprimir ticket", self.ticket), boton("Cerrar", self.accept)))
+        self.b_devolver = boton("Devolver productos", self.devolver,
+                                ayuda="Devolución de una parte de la venta. El resto de la venta sigue vigente.")
+        v.addLayout(fila(self.b_anular, self.b_devolver, None, boton("Ver / imprimir ticket", self.ticket), boton("Cerrar", self.accept)))
         self.pagos.itemSelectionChanged.connect(self.actualizar_botones)
         self.cargar()
 
@@ -122,7 +204,9 @@ class DialogoVenta(QDialog):
         if v["estado"] == "anulada":
             texto += f"\nAnulada el {cf(v['anulada_en'])[0]}. Motivo: {v['motivo_anulacion']}"
         self.datos.setText(texto)
+        devuelto = ctx.ventas.devuelto(self.venta_id)
         self.items.cargar([[i["codigo"], i["nombre"], (f"{fmt_cantidad(i['cantidad_mil'])} {i['unidad']}", 0),
+                            (fmt_cantidad(devuelto[i["id"]]["cantidad_mil"]) if i["id"] in devuelto else "", 0),
                             cd(i["precio_unit_cent"]), cd(i["descuento_cent"]), cd(i["total_cent"])]
                            for i in ctx.ventas.items(self.venta_id)])
         self.lista_pagos = ctx.ventas.pagos(self.venta_id)
@@ -153,6 +237,8 @@ class DialogoVenta(QDialog):
         self.b_verificar.setEnabled(con_orden and puede_caja)
         self.b_anular.setVisible(self.ctx.puede("anular"))
         self.b_anular.setEnabled(activa)
+        self.b_devolver.setVisible(self.ctx.puede("anular"))
+        self.b_devolver.setEnabled(activa)
 
     def confirmar_pago(self) -> None:
         pago = self._pago()
@@ -216,6 +302,15 @@ class DialogoVenta(QDialog):
         if dialogo.exec():
             self.ctx.ventas.anular(self.venta_id, motivo.text())
             self.cargar()
+
+    def devolver(self) -> None:
+        dialogo = DialogoDevolucion(self, self.ctx, self.venta_id)
+        hecho = dialogo.exec()
+        self.cargar()
+        if hecho and dialogo.nota is not None:
+            from .facturacion import mostrar_factura
+
+            mostrar_factura(self, self.ctx, dialogo.nota)
 
     def ticket(self) -> None:
         mostrar_comprobante(self, self.ctx, tickets.html_ticket(self.ctx, self.venta_id), f"Ticket venta {self.venta_id}")
