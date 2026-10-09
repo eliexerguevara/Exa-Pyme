@@ -13,8 +13,6 @@ certificado nuevo, que es lo que corresponde.
 """
 from __future__ import annotations
 
-import ctypes
-import ctypes.wintypes as wt
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,35 +23,9 @@ from cryptography.hazmat.primitives.serialization import pkcs7
 from cryptography.x509.oid import NameOID
 
 from ...core.errores import ErrorNegocio
+from ...proteccion import desproteger, proteger  # noqa: F401
 from ...rutas import carpeta_datos
 from . import cuit_valido, solo_digitos
-
-
-# ---- cifrado DPAPI ---------------------------------------------------------
-class _Blob(ctypes.Structure):
-    _fields_ = [("cbData", wt.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
-
-
-def _dpapi(funcion, datos: bytes) -> bytes:
-    entrada = _Blob(len(datos), ctypes.cast(ctypes.create_string_buffer(datos, len(datos)), ctypes.POINTER(ctypes.c_char)))
-    salida = _Blob()
-    if not funcion(ctypes.byref(entrada), None, None, None, None, 0, ctypes.byref(salida)):
-        raise ErrorNegocio(
-            "No se pudo acceder a la clave privada protegida. Solo puede usarla el mismo usuario de Windows "
-            "que la generó, en esta misma computadora."
-        )
-    try:
-        return ctypes.string_at(salida.pbData, salida.cbData)
-    finally:
-        ctypes.windll.kernel32.LocalFree(salida.pbData)
-
-
-def proteger(datos: bytes) -> bytes:
-    return _dpapi(ctypes.windll.crypt32.CryptProtectData, datos)
-
-
-def desproteger(datos: bytes) -> bytes:
-    return _dpapi(ctypes.windll.crypt32.CryptUnprotectData, datos)
 
 
 # ---- archivos ----------------------------------------------------------------

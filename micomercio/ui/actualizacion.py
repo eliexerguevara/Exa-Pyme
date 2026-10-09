@@ -55,6 +55,12 @@ class GestorActualizaciones(QObject):
         self.disponible = None
         self._consulta = self._descarga = self._dialogo = None
 
+    def detener(self) -> None:
+        """Espera a que termine una consulta en curso, para no cerrar el programa con un hilo activo."""
+        for hilo in (self._consulta, self._descarga):
+            if hilo is not None and hilo.isRunning():
+                hilo.wait(5000)
+
     def buscar(self, manual: bool = False) -> None:
         """manual=True muestra el resultado aunque no haya novedades o no haya Internet."""
         if self._consulta is not None and self._consulta.isRunning():

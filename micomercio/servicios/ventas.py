@@ -218,6 +218,15 @@ class Ventas:
                 raise ErrorNegocio("Este pago ya no está pendiente: no se puede confirmar otra vez.")
             self.ctx.auditar("pago_confirmado", "pagos", pago_id, f"Venta N° {pago['venta_id']}, {fmt_dinero(pago['monto_cent'])}")
 
+    def asociar_externo(self, pago_id: int, id_externo: str) -> None:
+        """Vincula un pago pendiente con su cobro en el proveedor de pagos (por ejemplo, la orden de Mercado Pago)."""
+        with self.db.transaccion():
+            cur = self.db.ejecutar(
+                "UPDATE pagos SET id_externo = ? WHERE id = ? AND estado = 'pendiente' AND tipo = 'cobro'", (id_externo, pago_id)
+            )
+            if cur.rowcount != 1:
+                raise ErrorNegocio("Este pago ya no está pendiente.")
+
     def descartar_pago(self, pago_id: int, estado: str) -> None:
         """Marca un pago pendiente como rechazado o cancelado. No genera ningún ingreso."""
         self.ctx.requiere("caja")

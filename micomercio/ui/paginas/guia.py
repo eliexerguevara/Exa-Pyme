@@ -165,7 +165,34 @@ en la caja que está abierta.</p>
 <h2>Cobros con transferencia y Mercado Pago</h2>
 <p>En estos medios el dinero no pasa por tus manos, así que el programa separa dos cosas: lo que <b>vendiste</b>
 y lo que <b>realmente cobraste</b>.</p>
-<h3>Al cobrar</h3>
+<h3>Mercado Pago con QR automático</h3>
+<p>Si conectás tu cuenta de Mercado Pago, el programa genera el cobro por el importe exacto y Mercado Pago le avisa
+cuando el cliente pagó. No hay que mirar el celular ni confirmar nada a mano.</p>
+<p><b>Configurarlo (una sola vez, el administrador):</b></p>
+<ol>
+  <li>Entrá a <b>Configuración</b> → pestaña <b>Mercado Pago</b>.</li>
+  <li>Seguí las instrucciones de la pantalla para obtener el <b>Access Token</b>, pegalo y pulsá
+      <b>Guardar credencial</b>. Debe aparecer el nombre de tu cuenta.</li>
+  <li>Pulsá <b>Actualizar lista</b> y elegí la caja que va a recibir los cobros. Si no tenés ninguna que sirva,
+      usá <b>Crear sucursal y caja</b>.</li>
+  <li>Elegí cómo paga el cliente: con un QR que aparece en la pantalla en cada venta, o con el QR impreso de la caja.</li>
+  <li>Tildá <b>Cobrar con QR de Mercado Pago</b> y guardá.</li>
+</ol>
+<p><b>Cobrar:</b></p>
+<ol>
+  <li>En la venta, pulsá <b>Mercado Pago (F8)</b> y confirmá con la opción «Cobrar con QR de Mercado Pago».</li>
+  <li>Aparece el código QR con el total. El cliente lo escanea con la app de Mercado Pago o de su banco y paga.</li>
+  <li>En unos segundos la ventana muestra <b>«Pago acreditado»</b> y se cierra sola. La venta queda cobrada y, si
+      Mercado Pago informa la comisión, también queda anotada.</li>
+</ol>
+<ul>
+  <li><b>Si el cliente no puede pagar:</b> pulsá <b>Cobrar de otra forma</b>. El cobro se cancela en Mercado Pago y
+      podés cobrar en efectivo o con tarjeta.</li>
+  <li><b>Si el QR vence</b> (a los 10 minutos): pulsá <b>Generar otro QR</b>.</li>
+  <li><b>Si se corta Internet:</b> pulsá <b>Dejar pendiente</b>. Después, en <b>Historial de ventas</b> → detalle de la
+      venta, pulsá <b>Verificar en Mercado Pago</b> y el programa averigua si el cliente llegó a pagar.</li>
+</ul>
+<h3>Transferencias, y Mercado Pago sin la conexión automática</h3>
 <ol>
   <li>Pulsá <b>Transferencia</b> o <b>Mercado Pago</b>.</li>
   <li>Abrí tu cuenta (la app del banco o de Mercado Pago) y fijate si el dinero ingresó.</li>

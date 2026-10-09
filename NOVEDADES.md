@@ -1,4 +1,4 @@
-- Facturación electrónica de ARCA: facturas A, B y C y notas de crédito, con CAE y código QR.
-- Se configura desde Facturación (datos fiscales y certificado). Viene desactivada y se puede probar en homologación.
-- Si no hay Internet, la venta se guarda igual y la factura queda pendiente para reintentar.
-- La guía de uso incluye el paso a paso de la facturación.
+- Cobro con QR de Mercado Pago: el programa genera el cobro por el importe exacto y lo confirma solo cuando Mercado Pago avisa que se acreditó.
+- Se configura desde Configuración → Mercado Pago (viene desactivado).
+- Desde Historial de ventas se puede verificar en Mercado Pago un pago que quedó pendiente.
+- Corrección: los importes de tickets y facturas ahora salen alineados a la derecha.

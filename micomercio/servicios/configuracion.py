@@ -36,6 +36,14 @@ PREDETERMINADOS = {
     "fiscal_entorno": "homologacion",
     "fiscal_habilitado": "0",
     "fiscal_automatico": "0",
+    # Mercado Pago (la credencial no se guarda acá: va cifrada en un archivo aparte)
+    "mp_habilitado": "0",
+    "mp_usuario_id": "",
+    "mp_cuenta": "",
+    "mp_caja": "",
+    "mp_caja_nombre": "",
+    "mp_caja_qr": "",
+    "mp_modo": "dynamic",
 }
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ["MICOMERCIO_SIN_ACTUALIZACIONES"] = "1"  # las pruebas no consultan GitHub
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -21,7 +22,19 @@ def app():
 
     aplicacion = QApplication.instance() or QApplication([])
     aplicacion.setStyleSheet(tema.HOJA_DE_ESTILO)
-    return aplicacion
+    yield aplicacion
+    # Cierre ordenado: las ventanas, imágenes e hilos de Qt deben destruirse antes que la aplicación,
+    # y no durante el apagado del intérprete.
+    import gc
+
+    gc.collect()
+    for ventana in aplicacion.topLevelWidgets():
+        ventana.close()
+        ventana.deleteLater()
+    for _ in range(3):
+        aplicacion.sendPostedEvents(None, 0)
+        aplicacion.processEvents()
+    gc.collect()
 
 
 @pytest.fixture

@@ -6,11 +6,11 @@ from ... import __version__
 from ...core import precios
 from ...core.dinero import D, fmt_pct, parse_decimal
 from ...core.errores import ErrorNegocio
-from ...integraciones import mercadopago
 from ...rutas import carpeta_datos, carpeta_registros
 from ...servicios.contexto import ROLES
 from ..comunes import CampoDecimal, Dialogo, Pagina, Tabla, boton, cf, etiqueta, fila, informar
 from ..impresion import impresoras
+from .config_mp import PanelMercadoPago
 
 ACCIONES = {
     "cambio_precio": "Cambio de precio", "cambio_masivo_precios": "Cambio masivo de precios",
@@ -120,9 +120,11 @@ class PaginaConfiguracion(Pagina):
         f2.addRow("", etiqueta(
             "«Margen sobre el precio de venta»: con costo $ 10.000 y 30 % el precio sin impuestos es $ 14.285,71.\n"
             "«Recargo sobre el costo»: con los mismos datos el precio sin impuestos es $ 13.000,00.", "suave", True))
-        f2.addRow("Mercado Pago:", etiqueta(mercadopago.crear_servicio(self.ctx).estado().mensaje, "suave", True))
         f2.addRow("", boton("Guardar", self.guardar_ventas, "primario"))
         pestanas.addTab(ventas, "Ventas y precios")
+
+        self.mercado_pago = PanelMercadoPago(self.ctx)
+        pestanas.addTab(self.mercado_pago, "Mercado Pago")
 
         # --- usuarios ---
         usuarios = QWidget()
@@ -163,6 +165,7 @@ class PaginaConfiguracion(Pagina):
         self.negativo.setChecked(cfg.booleano("permitir_stock_negativo"))
         self.impuesto.setCurrentText(fmt_pct(cfg.decimal("impuesto_predeterminado")))
         self.metodo.setCurrentIndex(max(0, self.metodo.findData(cfg.obtener("metodo_precio_predeterminado"))))
+        self.mercado_pago.refrescar()
         self.cargar_usuarios()
         self.tabla_registro.cargar([[cf(a["fecha"]), a["usuario"], ACCIONES.get(a["accion"], a["accion"]), a["detalle"] or ""]
                                     for a in self.ctx.auditoria()])

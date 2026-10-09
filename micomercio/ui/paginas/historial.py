@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QComboBox, QDialog, QLineEdit, QVBoxLayout
 
 from ...core.dinero import a_centavos, de_centavos, fmt_cantidad, fmt_dinero
 from ...core.errores import ErrorNegocio
+from ...integraciones import mercadopago
 from ...servicios import tickets
 from ...servicios.caja import MEDIOS
 from ...servicios.ventas import ESTADOS_PAGO, MEDIOS_CON_PENDIENTE, estado_pago
@@ -99,8 +100,11 @@ class DialogoVenta(QDialog):
         self.b_rechazar = boton("Marcar rechazado", lambda: self.descartar("rechazado"))
         self.b_cancelar = boton("Marcar cancelado", lambda: self.descartar("cancelado"))
         self.b_comision = boton("Cargar comisión de Mercado Pago", self.comision)
+        self.b_verificar = boton("Verificar en Mercado Pago", self.verificar_mp,
+                                 ayuda="Consulta a Mercado Pago si el cliente pagó y actualiza el pago.")
         self.b_cobro = boton("Registrar cobro", self.nuevo_cobro)
-        v.addLayout(fila(self.b_confirmar, self.b_rechazar, self.b_cancelar, self.b_comision, self.b_cobro, None))
+        v.addLayout(fila(self.b_verificar, self.b_confirmar, self.b_rechazar, self.b_cancelar, None))
+        v.addLayout(fila(self.b_comision, self.b_cobro, None))
         self.b_anular = boton("Anular venta", self.anular, "peligro")
         v.addLayout(fila(self.b_anular, None, boton("Ver / imprimir ticket", self.ticket), boton("Cerrar", self.accept)))
         self.pagos.itemSelectionChanged.connect(self.actualizar_botones)
@@ -144,6 +148,9 @@ class DialogoVenta(QDialog):
         self.b_comision.setEnabled(bool(pago) and pago["estado"] == "confirmado" and pago["medio"] == "mercadopago"
                                    and pago["tipo"] == "cobro" and puede_caja)
         self.b_cobro.setEnabled(activa and puede_caja and self.ctx.ventas.saldo(self.venta_id) > 0)
+        con_orden = pendiente and pago["medio"] == "mercadopago" and bool(pago["id_externo"])
+        self.b_verificar.setVisible(con_orden)
+        self.b_verificar.setEnabled(con_orden and puede_caja)
         self.b_anular.setVisible(self.ctx.puede("anular"))
         self.b_anular.setEnabled(activa)
 
@@ -153,6 +160,25 @@ class DialogoVenta(QDialog):
         if dialogo.exec():
             self.ctx.ventas.confirmar_pago(pago["id"], dialogo.referencia.text(), dialogo.comision_cent())
             self.cargar()
+
+    def verificar_mp(self) -> None:
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+
+        from ..comunes import informar
+
+        pago = self._pago()
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            estado = mercadopago.crear_servicio(self.ctx).verificar(pago["id"])
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.cargar()
+        textos = {"confirmado": "Mercado Pago confirmó el pago. Quedó registrado como cobrado.",
+                  "pendiente": "Mercado Pago todavía no registra el pago.",
+                  "cancelado": "El cobro venció o fue cancelado sin pagarse. La venta quedó sin cobrar.",
+                  "rechazado": "Mercado Pago rechazó el pago. La venta quedó sin cobrar."}
+        informar(self, textos.get(estado, estado), "Mercado Pago")
 
     def descartar(self, estado: str) -> None:
         pago = self._pago()
@@ -181,6 +207,8 @@ class DialogoVenta(QDialog):
         dialogo.cuerpo.insertWidget(0, etiqueta(
             f"Vas a anular la venta N° {self.venta_id} por {fmt_dinero(self.venta['total_cent'])}.\n\n"
             "Los productos vuelven al stock y el dinero cobrado se registra como devolución en la caja abierta. "
+            "Si se cobró con Mercado Pago o con tarjeta, la devolución del dinero hay que hacerla aparte, desde "
+            "la cuenta de Mercado Pago o la terminal. "
             "La venta no se borra: queda en el historial como anulada.", ajustar=True))
         motivo = QLineEdit()
         dialogo.formulario.addRow("Motivo:", motivo)

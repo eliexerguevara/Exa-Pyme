@@ -3,8 +3,8 @@
 Sistema de ventas e inventario para Windows 10 y 11, pensado para un comercio minorista de Argentina.
 Aplicación de escritorio (Python + PySide6 + SQLite), empaquetada en un único `MiComercio.exe`.
 
-Estado: **etapas 1 a 7 completas** (ventas, inventario, caja, reportes, copias y facturación electrónica de ARCA).
-La etapa 8 (Mercado Pago) está preparada pero no conectada.
+Estado: **las 8 etapas están implementadas**: ventas, inventario, caja, reportes, copias, facturación
+electrónica de ARCA y cobro con QR de Mercado Pago.
 
 ## Para el usuario final
 
@@ -74,7 +74,7 @@ micomercio/
   db/                      conexión SQLite, transacciones, esquema y migraciones
   servicios/               reglas de negocio, sin interfaz: productos, inventario, ventas,
                            caja, compras, clientes, reportes, copias, CSV, tickets, usuarios
-  integraciones/           arca/ (facturación electrónica) y mercadopago.py (preparada)
+  integraciones/           arca/ (facturación electrónica) y mercadopago.py (cobro con QR)
   ui/                      ventana principal, tema, piezas comunes e impresión
   ui/paginas/              una pantalla por cada opción del menú
 tests/                     pruebas de precios, servicios e interfaz
@@ -119,10 +119,26 @@ Las pruebas (`tests/test_arca.py`) usan un ARCA simulado que responde los mismos
 reales se verificó la conexión, el formato de los pedidos y la firma; la emisión de un comprobante real requiere el
 certificado del comercio y debe probarse primero en homologación.
 
+## Cobro con QR de Mercado Pago
+
+Está en `micomercio/integraciones/mercadopago.py` y se activa desde **Configuración → Mercado Pago**. Viene desactivado.
+
+- Usa la **API de Orders** vigente (`POST /v1/orders` con `type: "qr"`); la API anterior de QR está deprecada.
+- Modos: QR dinámico en pantalla, QR estático de la caja, o ambos (híbrido).
+- El pago se confirma solo cuando `GET /v1/orders/{id}` informa la orden procesada, por el mismo importe y con la
+  misma referencia. Vencida, cancelada o rechazada no generan ingreso.
+- No usa webhooks (un programa de escritorio no tiene dirección pública): consulta la API cada pocos segundos mientras
+  la ventana de cobro está abierta, y a pedido desde Historial de ventas.
+- El Access Token se guarda cifrado con DPAPI, fuera de la base, de las copias y de los registros.
+- Las devoluciones de dinero no se hacen desde el programa: se hacen en la cuenta de Mercado Pago.
+
+Las pruebas (`tests/test_mercadopago.py`) usan una API simulada. Contra la API real solo se verificó la dirección, el
+formato del pedido y el rechazo de una credencial inventada: el primer cobro real hay que probarlo con la cuenta del
+comercio (Mercado Pago ofrece credenciales y usuarios de prueba).
+
 ## Lo que todavía no hace
 
-- **Mercado Pago**: no se conecta a la API. Los cobros quedan pendientes hasta que se confirman a mano
-  después de verificarlos en la cuenta. El plan de la etapa 8 está en `integraciones/mercadopago.py`.
+- Mercado Pago: no hace devoluciones ni recibe notificaciones (webhooks); no cobra con Point ni con link de pago.
 - Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos; las notas de crédito son
   por el total de la factura. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
 - Devoluciones parciales: una venta se anula completa. Una devolución suelta se carga como movimiento

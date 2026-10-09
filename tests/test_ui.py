@@ -16,13 +16,6 @@ from micomercio.ui.paginas.productos import DialogoCambioMasivo, DialogoProducto
 from micomercio.ui.ventana import MENU, VentanaPrincipal
 
 
-@pytest.fixture(scope="session")
-def app():
-    aplicacion = QApplication.instance() or QApplication([])
-    aplicacion.setStyleSheet(tema.HOJA_DE_ESTILO)
-    return aplicacion
-
-
 @pytest.fixture
 def ventana(app, ctx, producto):
     v = VentanaPrincipal(ctx)

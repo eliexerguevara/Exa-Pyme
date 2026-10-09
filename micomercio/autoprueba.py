@@ -19,6 +19,7 @@ from decimal import Decimal
 def ejecutar(ruta_resultado: str | None = None) -> int:
     temporal = tempfile.mkdtemp(prefix="micomercio_autoprueba_")
     os.environ["MICOMERCIO_DATOS"] = temporal
+    os.environ["MICOMERCIO_SIN_ACTUALIZACIONES"] = "1"
     codigo, mensaje = 0, "OK"
     db = None
     try:

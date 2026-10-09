@@ -79,7 +79,9 @@ def main() -> int:
             return 0
         ventana = VentanaPrincipal(ctx)
         ventana.showMaximized()
-        return app.exec()
+        codigo = app.exec()
+        del ventana  # las ventanas se destruyen antes que la aplicación
+        return codigo
     finally:
         db.cerrar()
         candado.unlock()

@@ -11,24 +11,27 @@ from PySide6.QtWidgets import (
 
 from ...core.dinero import D, a_centavos, a_milesimas, de_centavos, fmt_cantidad, fmt_dinero, fmt_pct, parse_decimal
 from ...core.errores import ErrorNegocio
-from ...integraciones import arca
+from ...integraciones import arca, mercadopago
 from ...servicios import tickets
 from ...servicios.caja import MEDIOS
-from ...servicios.ventas import calcular_totales
+from ...servicios.ventas import calcular_totales, estado_pago
 from .. import tema
 from ..comunes import (
     Buscador, CampoDecimal, Dialogo, Pagina, Tabla, boton, cd, confirmar, etiqueta, fila, panel,
 )
+from ..cobro_qr import DialogoCobroQR
 from ..impresion import imprimir_directo, mostrar_comprobante
 from .facturacion import con_espera, mostrar_factura
+from .historial import DialogoNuevoCobro
 
 
 class DialogoCobro(Dialogo):
     """Confirma el cobro según el medio de pago. Devuelve el pago en .pago"""
 
-    def __init__(self, padre, medio: str, total_cent: int):
+    def __init__(self, padre, medio: str, total_cent: int, con_qr: bool = False):
         super().__init__(padre, f"Cobrar con {MEDIOS[medio].lower()}", "Confirmar venta", 440)
         self.medio, self.total_cent, self.pago, self.vuelto_cent = medio, total_cent, None, 0
+        self.qr, self.usar_qr = None, False
         total = etiqueta(fmt_dinero(total_cent), "total")
         total.setAlignment(Qt.AlignCenter)
         self.cuerpo.insertWidget(0, total)
@@ -60,6 +63,12 @@ class DialogoCobro(Dialogo):
             grupo.addButton(self.pendiente)
             self.cuerpo.insertWidget(3, self.verificado)
             self.cuerpo.insertWidget(4, self.pendiente)
+            if con_qr and medio == "mercadopago":
+                # Con la integración activa, lo normal es cobrar con el QR: Mercado Pago confirma el pago.
+                self.qr = QRadioButton("Cobrar con QR de Mercado Pago (el pago se confirma solo)")
+                grupo.addButton(self.qr)
+                self.qr.setChecked(True)
+                self.cuerpo.insertWidget(3, self.qr)
             self.referencia = QLineEdit()
             self.referencia.setPlaceholderText("Opcional")
             self.formulario.addRow("N° de operación:", self.referencia)
@@ -92,6 +101,7 @@ class DialogoCobro(Dialogo):
             pago["referencia"] = self.referencia.text()
         if self.verificado is not None and not self.verificado.isChecked():
             pago["estado"] = "pendiente"
+        self.usar_qr = self.qr is not None and self.qr.isChecked()
         if self.comision and self.comision.valor() is not None:
             pago["comision_cent"] = a_centavos(self.comision.valor())
         self.pago = pago
@@ -150,8 +160,8 @@ class DialogoVentaRegistrada(QDialog):
             vuelto = etiqueta(f"Vuelto: {fmt_dinero(vuelto_cent)}", "total")
             v.addWidget(vuelto)
         if pendiente:
-            v.addWidget(etiqueta("El pago quedó PENDIENTE: no se cuenta como cobrado. Cuando verifiques que el dinero "
-                                 "ingresó, confirmalo desde «Historial de ventas».", "aviso", True))
+            v.addWidget(etiqueta("El cobro de esta venta todavía NO está confirmado: no se cuenta como cobrado. Podés "
+                                 "confirmarlo o cobrarla de otra forma desde «Historial de ventas».", "aviso", True))
         self.l_fiscal = etiqueta("", "nota", True)
         v.addWidget(self.l_fiscal)
         self.b_factura = boton("Emitir factura", self.facturar)
@@ -493,11 +503,13 @@ class PaginaVenta(Pagina):
         self.cobrando = True
         self.actualizar_botones()
         try:
-            pagos, vuelto, pendiente = [], 0, False
+            pagos, vuelto, pendiente, usar_qr = [], 0, False, False
             if t["total_cent"] > 0:
-                dialogo = DialogoCobro(self, medio, t["total_cent"])
+                con_qr = medio == "mercadopago" and mercadopago.crear_servicio(self.ctx).estado().disponible
+                dialogo = DialogoCobro(self, medio, t["total_cent"], **({"con_qr": True} if con_qr else {}))
                 if not dialogo.exec():
                     return
+                usar_qr = getattr(dialogo, "usar_qr", False)
                 pagos, vuelto, pendiente = [dialogo.pago], dialogo.vuelto_cent, dialogo.pago["estado"] == "pendiente"
             venta_id = self.ctx.ventas.registrar(
                 self.uuid,
@@ -509,6 +521,8 @@ class PaginaVenta(Pagina):
             self.cobrando = False
             self.actualizar_botones()
         self.reiniciar()
+        if usar_qr:
+            pendiente = self.cobrar_con_qr(venta_id)
         self.ventana.actualizar_estado()
         if self.ctx.config.booleano("ticket_imprimir_automatico"):
             try:
@@ -526,6 +540,17 @@ class PaginaVenta(Pagina):
                     error_fiscal = str(e)
         DialogoVentaRegistrada(self, self.ctx, venta_id, vuelto, pendiente, factura, error_fiscal).exec()
         self.enfocar()
+
+    def cobrar_con_qr(self, venta_id: int) -> bool:
+        """Muestra el QR y espera a Mercado Pago. Devuelve True si la venta quedó sin cobrar o pendiente."""
+        pago_id = self.ctx.ventas.pagos(venta_id)[0]["id"]
+        dialogo = DialogoCobroQR(self, self.ctx, venta_id, pago_id)
+        dialogo.exec()
+        if dialogo.resultado == "otra_forma" and self.ctx.ventas.saldo(venta_id) > 0:
+            otro = DialogoNuevoCobro(self, self.ctx.ventas.saldo(venta_id))
+            if otro.exec():
+                self.ctx.ventas.agregar_pago(venta_id, otro.pago())
+        return estado_pago(self.ctx.ventas.obtener(venta_id)) != "pagada"
 
     def refrescar(self) -> None:
         abierta = self.ctx.caja.abierta() is not None

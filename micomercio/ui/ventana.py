@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
@@ -114,7 +116,11 @@ class VentanaPrincipal(QMainWindow):
         self.ir("inicio")
 
         # Copia automática diaria: al abrir y, si el programa queda abierto varios días, cada hora se revisa.
-        QTimer.singleShot(1500, self.copia_automatica)
+        # Los relojes pertenecen a la ventana: al cerrarla se detienen y no disparan nada después.
+        self.reloj_inicio = QTimer(self)
+        self.reloj_inicio.setSingleShot(True)
+        self.reloj_inicio.timeout.connect(self.copia_automatica)
+        self.reloj_inicio.start(1500)
         self.reloj_copias = QTimer(self)
         self.reloj_copias.timeout.connect(self.copia_automatica)
         self.reloj_copias.start(60 * 60 * 1000)
@@ -122,8 +128,12 @@ class VentanaPrincipal(QMainWindow):
         # Actualizaciones: se consulta al abrir y cada seis horas. Sin Internet no pasa nada.
         self.reloj_actualizaciones = QTimer(self)
         self.reloj_actualizaciones.timeout.connect(lambda: self.actualizaciones.buscar())
-        if ctx.puede("configuracion"):
-            QTimer.singleShot(4000, lambda: self.actualizaciones.buscar())
+        self.reloj_primera_consulta = QTimer(self)
+        self.reloj_primera_consulta.setSingleShot(True)
+        self.reloj_primera_consulta.timeout.connect(lambda: self.actualizaciones.buscar())
+        # MICOMERCIO_SIN_ACTUALIZACIONES=1 evita la consulta automática (pruebas, equipos sin Internet).
+        if ctx.puede("configuracion") and not os.environ.get("MICOMERCIO_SIN_ACTUALIZACIONES"):
+            self.reloj_primera_consulta.start(4000)
             self.reloj_actualizaciones.start(6 * 60 * 60 * 1000)
 
     def ir(self, clave: str) -> None:
@@ -161,6 +171,7 @@ class VentanaPrincipal(QMainWindow):
         self.close()
 
     def closeEvent(self, evento) -> None:
-        self.reloj_copias.stop()
-        self.reloj_actualizaciones.stop()
+        for reloj in (self.reloj_copias, self.reloj_actualizaciones, self.reloj_inicio, self.reloj_primera_consulta):
+            reloj.stop()
+        self.actualizaciones.detener()
         evento.accept()
