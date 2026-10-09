@@ -171,7 +171,7 @@ MIGRACIONES: list[str] = [
         anulada_en          TEXT,
         anulada_por         INTEGER REFERENCES usuarios(id),
         motivo_anulacion    TEXT NOT NULL DEFAULT '',
-        -- sin_comprobante | pendiente | autorizada | rechazada  (lo maneja el módulo ARCA)
+        -- sin_comprobante | pendiente | autorizada | nota_credito  (lo maneja el módulo ARCA)
         estado_fiscal       TEXT NOT NULL DEFAULT 'sin_comprobante',
         notas               TEXT NOT NULL DEFAULT ''
     );
@@ -242,8 +242,7 @@ MIGRACIONES: list[str] = [
     );
     CREATE INDEX ix_compra_items_compra ON compra_items(compra_id);
 
-    -- Preparada para la etapa 7 (ARCA). El MVP no escribe en esta tabla:
-    -- un CAE solo puede venir de una respuesta real de los servicios de ARCA.
+    -- Comprobantes de ARCA. Un CAE solo se guarda si vino en una respuesta real de sus servicios.
     CREATE TABLE comprobantes_fiscales (
         id                  INTEGER PRIMARY KEY,
         venta_id            INTEGER NOT NULL REFERENCES ventas(id),
@@ -261,6 +260,26 @@ MIGRACIONES: list[str] = [
         respuesta           TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX ix_fiscales_venta ON comprobantes_fiscales(venta_id);
+    """,
+    # ---- versión 2: datos de los comprobantes de ARCA (etapa 7) ----------
+    """
+    ALTER TABLE comprobantes_fiscales ADD COLUMN clase TEXT NOT NULL DEFAULT 'factura';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN letra TEXT NOT NULL DEFAULT '';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN fecha TEXT NOT NULL DEFAULT '';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN doc_tipo INTEGER NOT NULL DEFAULT 99;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN doc_nro TEXT NOT NULL DEFAULT '0';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN condicion_receptor INTEGER NOT NULL DEFAULT 5;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN neto_cent INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN iva_cent INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE comprobantes_fiscales ADD COLUMN alicuotas TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN cuit_emisor TEXT NOT NULL DEFAULT '';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN receptor TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN emisor TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN observaciones TEXT NOT NULL DEFAULT '';
+    ALTER TABLE comprobantes_fiscales ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id);
+    -- Un mismo número de comprobante no puede quedar autorizado dos veces.
+    CREATE UNIQUE INDEX ux_fiscal_numero
+        ON comprobantes_fiscales(entorno, cuit_emisor, punto_venta, tipo, numero) WHERE estado = 'autorizada';
     """,
 ]
 

@@ -1,6 +1,7 @@
-"""Integraciones externas (ARCA y Mercado Pago).
+"""Integraciones externas.
 
-Cada integración es un módulo independiente que la aplicación consulta a través
-de una interfaz pequeña. En el MVP ninguna está habilitada: `disponible()`
-devuelve False y la aplicación funciona completa sin ellas.
+arca         facturación electrónica (WSAA y WSFEv1). Se activa desde la pantalla Facturación.
+mercadopago  preparada para la etapa 8; todavía no se conecta.
+
+La aplicación funciona completa aunque ninguna esté activa.
 """

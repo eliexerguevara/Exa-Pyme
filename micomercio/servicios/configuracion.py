@@ -34,6 +34,8 @@ PREDETERMINADOS = {
     "fiscal_inicio_actividades": "",
     "fiscal_punto_venta": "",
     "fiscal_entorno": "homologacion",
+    "fiscal_habilitado": "0",
+    "fiscal_automatico": "0",
 }
 
 

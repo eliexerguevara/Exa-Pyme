@@ -265,7 +265,7 @@ class Ventas:
         return pago_id
 
     # ---- anulación -------------------------------------------------------
-    def anular(self, venta_id: int, motivo: str) -> None:
+    def anular(self, venta_id: int, motivo: str, con_nota_credito: bool = False) -> None:
         """Anula la venta: devuelve el stock, cancela los pagos pendientes y registra la
         devolución de lo ya cobrado. La venta no se borra: queda marcada como anulada."""
         self.ctx.requiere("anular")
@@ -276,9 +276,14 @@ class Ventas:
             v = self.obtener(venta_id)
             if v["estado"] != "completada":
                 raise ErrorNegocio("Esta venta ya está anulada.")
-            if v["estado_fiscal"] in ("autorizada", "pendiente"):
+            if v["estado_fiscal"] == "pendiente":
                 raise ErrorNegocio(
-                    "Esta venta tiene un comprobante fiscal. Para anularla hay que emitir una nota de crédito."
+                    "Esta venta tiene una factura pendiente de autorización. Resolvela primero desde Facturación."
+                )
+            if v["estado_fiscal"] == "autorizada" and not con_nota_credito:
+                raise ErrorNegocio(
+                    "Esta venta tiene una factura autorizada por ARCA. Para anularla hay que emitir una nota de "
+                    "crédito desde Facturación."
                 )
             fecha = ahora()
             confirmados = self.db.consultar(

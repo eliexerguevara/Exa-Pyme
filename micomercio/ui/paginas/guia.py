@@ -158,8 +158,8 @@ en la caja que está abierta.</p>
 </ol>
 """ + _nota("Al confirmar, el stock se descuenta solo. Si no hay stock suficiente de un producto, el programa avisa "
             "y no deja agregarlo.") + _nota(
-    "El ticket es un comprobante interno y dice «Documento no válido como factura». Esta versión todavía no emite "
-    "facturas electrónicas de ARCA.", "ojo")),
+    "El ticket es un comprobante interno y dice «Documento no válido como factura». Para entregar una factura "
+    "electrónica de ARCA, mirá el tema 16.", "ojo")),
 
     ("6. Transferencias y Mercado Pago", """
 <h2>Cobros con transferencia y Mercado Pago</h2>
@@ -370,7 +370,47 @@ los ajustes de inventario y los cierres de caja, con fecha y usuario.</p>
 <p>En cualquier tabla, un clic en el título de una columna ordena la lista por esa columna.</p>
 """),
 
-    ("16. Actualizar el programa", """
+    ("16. Facturación electrónica (ARCA)", """
+<h2>Facturación electrónica (ARCA)</h2>
+<p>MiComercio puede emitir facturas electrónicas A, B y C y notas de crédito, pidiendo el CAE a ARCA por Internet.
+Viene desactivado: hasta que lo configures, el programa sigue entregando tickets internos.</p>
+<h3>Configurarlo por primera vez</h3>
+<ol>
+  <li>Entrá a <b>Facturación</b> → pestaña <b>Datos fiscales</b> y completá razón social, CUIT, condición frente al
+      IVA, domicilio y punto de venta. Dejá el entorno en <b>Homologación</b> (pruebas), tildá
+      <b>Activar la facturación electrónica</b> y guardá.</li>
+  <li>Pasá a la pestaña <b>Certificado</b> y seguí los pasos que figuran ahí: el programa genera el pedido, vos lo
+      presentás en el sitio de ARCA con tu clave fiscal y después cargás el certificado que ARCA te entrega.</li>
+  <li>Pulsá <b>3. Probar conexión</b>. Si todo está bien, informa el último número autorizado.</li>
+  <li>Hacé algunas facturas de prueba. En homologación los comprobantes dicen «sin validez fiscal».</li>
+  <li>Cuando funcione, repetí los pasos 1 y 2 eligiendo el entorno <b>Producción</b>, que usa otro certificado.
+      Desde ese momento las facturas son reales.</li>
+</ol>
+<h3>Emitir una factura</h3>
+<ul>
+  <li><b>Al terminar una venta:</b> en la ventana «Venta registrada» pulsá <b>Emitir factura</b>.</li>
+  <li><b>Siempre, sin preguntar:</b> tildá «Emitir la factura automáticamente al registrar cada venta» en Datos fiscales.</li>
+  <li><b>Más tarde:</b> en <b>Facturación</b> → <b>Comprobantes</b>, seleccioná la venta y pulsá <b>Emitir factura</b>.</li>
+</ul>
+<p>El tipo de factura lo decide el programa: si el comercio es monotributista o exento, Factura C. Si es responsable
+inscripto, Factura A cuando el cliente es responsable inscripto o monotributista (tiene que tener CUIT cargado) y
+Factura B en los demás casos. Por eso, para una Factura A hay que elegir el cliente antes de cobrar.</p>
+<h3>Si no hay Internet o ARCA no responde</h3>
+<p>La venta se guarda igual y la factura queda <b>pendiente</b>. Cuando vuelva la conexión, entrá a
+<b>Facturación</b> y pulsá <b>Reintentar pendientes</b>. El programa primero averigua si ARCA llegó a autorizarla,
+para no facturar dos veces.</p>
+<h3>Si ARCA rechaza la factura</h3>
+<p>En la lista aparece en rojo, con el motivo que informó ARCA. Corregí el dato (por ejemplo, el documento del
+cliente) y volvé a pulsar <b>Emitir factura</b>.</p>
+<h3>Anular una venta facturada</h3>
+<p>Una factura autorizada no se borra: se anula con una nota de crédito. En <b>Facturación</b> → <b>Comprobantes</b>,
+seleccioná la venta y pulsá <b>Emitir nota de crédito</b>. Cuando ARCA la autoriza, la venta queda anulada, los
+productos vuelven al stock y la devolución del dinero se registra en la caja.</p>
+""" + _nota("Solo es una factura lo que tiene CAE y código QR. El programa nunca imprime como factura un comprobante "
+            "que ARCA no autorizó.") + _nota(
+    "El certificado vence (la pantalla muestra la fecha). Antes de que venza, generá un pedido nuevo y cargá el "
+    "certificado nuevo: el anterior sigue funcionando mientras tanto.", "ojo")),
+    ("17. Actualizar el programa", """
 <h2>Actualizar el programa</h2>
 <p>Cuando se publica una versión nueva de MiComercio, aparece el botón azul <b>Update</b> en la parte de abajo del
 menú, con el número de la versión. El programa lo consulta solo al abrirse (hace falta Internet) y solo lo ve
@@ -387,7 +427,7 @@ el administrador.</p>
 """ + _nota("Actualizar no cambia tus productos, ventas ni configuración: los datos están guardados aparte del "
             "programa. Si la descarga falla o llega dañada, se descarta y el programa queda como estaba.")),
 
-    ("17. Problemas frecuentes", """
+    ("18. Problemas frecuentes", """
 <h2>Problemas frecuentes</h2>
 <h3>Los botones de cobro están apagados</h3>
 <p>La caja está cerrada o la venta no tiene productos. Abrí la caja desde <b>Caja diaria</b>.</p>

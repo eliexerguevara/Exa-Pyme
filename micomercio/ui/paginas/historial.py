@@ -16,7 +16,7 @@ from ..impresion import mostrar_comprobante
 
 ESTADOS_DE_PAGO = {"pendiente": "Pendiente", "confirmado": "Confirmado", "rechazado": "Rechazado", "cancelado": "Cancelado"}
 ESTADOS_FISCALES = {"sin_comprobante": "Sin comprobante fiscal", "pendiente": "Pendiente de autorización",
-                    "autorizada": "Autorizada", "rechazada": "Rechazada"}
+                    "autorizada": "Factura autorizada", "nota_credito": "Anulada con nota de crédito"}
 COLORES = {"pendiente": tema.NARANJA, "impaga": tema.ROJO, "anulada": "#9CA3AF"}
 
 

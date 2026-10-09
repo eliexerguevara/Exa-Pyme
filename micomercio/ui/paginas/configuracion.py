@@ -21,6 +21,7 @@ ACCIONES = {
     "compra": "Compra", "configuracion": "Cambio de configuración", "usuario_creado": "Usuario creado",
     "usuario_modificado": "Usuario modificado", "usuario_clave": "Cambio de contraseña",
     "copia_restaurada": "Copia de seguridad restaurada", "importacion_productos": "Importación de productos",
+    "comprobante_autorizado": "Comprobante autorizado por ARCA", "comprobante_rechazado": "Comprobante rechazado por ARCA",
     "producto_activado": "Producto activado", "producto_desactivado": "Producto desactivado",
 }
 

@@ -1,2 +1,4 @@
-- Nuevo apartado «Guía de uso», con el paso a paso de cada pantalla.
-- Actualización desde el programa: cuando hay una versión nueva aparece el botón «Update» en el menú.
+- Facturación electrónica de ARCA: facturas A, B y C y notas de crédito, con CAE y código QR.
+- Se configura desde Facturación (datos fiscales y certificado). Viene desactivada y se puede probar en homologación.
+- Si no hay Internet, la venta se guarda igual y la factura queda pendiente para reintentar.
+- La guía de uso incluye el paso a paso de la facturación.

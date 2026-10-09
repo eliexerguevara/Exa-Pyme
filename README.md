@@ -3,7 +3,8 @@
 Sistema de ventas e inventario para Windows 10 y 11, pensado para un comercio minorista de Argentina.
 Aplicación de escritorio (Python + PySide6 + SQLite), empaquetada en un único `MiComercio.exe`.
 
-Estado: **MVP, etapas 1 a 6 completas**, con guía de uso y actualización desde el programa. Las etapas 7 (ARCA) y 8 (Mercado Pago) están preparadas pero no conectadas.
+Estado: **etapas 1 a 7 completas** (ventas, inventario, caja, reportes, copias y facturación electrónica de ARCA).
+La etapa 8 (Mercado Pago) está preparada pero no conectada.
 
 ## Para el usuario final
 
@@ -73,7 +74,7 @@ micomercio/
   db/                      conexión SQLite, transacciones, esquema y migraciones
   servicios/               reglas de negocio, sin interfaz: productos, inventario, ventas,
                            caja, compras, clientes, reportes, copias, CSV, tickets, usuarios
-  integraciones/           arca.py y mercadopago.py (interfaces preparadas)
+  integraciones/           arca/ (facturación electrónica) y mercadopago.py (preparada)
   ui/                      ventana principal, tema, piezas comunes e impresión
   ui/paginas/              una pantalla por cada opción del menú
 tests/                     pruebas de precios, servicios e interfaz
@@ -99,12 +100,31 @@ Precio de venta final = Precio de venta sin impuestos × (1 + Impuestos / 100)
 
 Ejemplo verificado en las pruebas: costo $ 10.000, impuestos 21 %, ganancia 30 % → $ 14.285,71 y $ 17.285,71.
 
-## Lo que el MVP todavía no hace
+## Facturación electrónica (ARCA)
 
-- **ARCA**: no emite facturas ni pide CAE. Los tickets llevan la leyenda «Documento no válido como factura».
-  La pantalla Facturación guarda los datos fiscales; el plan de la etapa 7 está en `integraciones/arca.py`.
+Está en `micomercio/integraciones/arca/` y se activa desde la pantalla **Facturación**. Viene desactivada.
+
+- **WSAA**: firma el pedido de acceso (CMS) con el certificado del comercio y guarda el ticket hasta que vence.
+- **WSFEv1**: `FECompUltimoAutorizado`, `FECAESolicitar` y `FECompConsultar`, con los campos en el orden del WSDL oficial.
+- **Comprobantes**: facturas A, B y C y notas de crédito, con CAE, vencimiento y código QR.
+- **Certificado**: el programa genera la clave privada y el pedido (`.csr`); la clave queda cifrada con DPAPI para el
+  usuario de Windows, fuera de la base de datos y de las copias de seguridad.
+- **Sin conexión**: la venta se guarda igual y la factura queda pendiente. Al reintentar, primero se consulta a ARCA si
+  el comprobante ya había sido autorizado, para no duplicarlo.
+- **Entornos**: homologación y producción, cada uno con su certificado. Los comprobantes de homologación se imprimen
+  con la leyenda «sin validez fiscal» y no cambian el estado de las ventas.
+- Un CAE solo se guarda si vino en una respuesta aprobada de ARCA.
+
+Las pruebas (`tests/test_arca.py`) usan un ARCA simulado que responde los mismos mensajes SOAP. Contra los servidores
+reales se verificó la conexión, el formato de los pedidos y la firma; la emisión de un comprobante real requiere el
+certificado del comercio y debe probarse primero en homologación.
+
+## Lo que todavía no hace
+
 - **Mercado Pago**: no se conecta a la API. Los cobros quedan pendientes hasta que se confirman a mano
   después de verificarlos en la cuenta. El plan de la etapa 8 está en `integraciones/mercadopago.py`.
+- Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos; las notas de crédito son
+  por el total de la factura. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
 - Devoluciones parciales: una venta se anula completa. Una devolución suelta se carga como movimiento
   de inventario.
 - Pago combinado (parte en efectivo y parte con tarjeta) desde la pantalla de venta.

@@ -51,6 +51,16 @@ def ejecutar(ruta_resultado: str | None = None) -> int:
         assert ctx.productos.obtener(producto)["stock_mil"] == 4000, "la venta no descontó el stock"
         assert "DOCUMENTO NO VÁLIDO COMO FACTURA" in tickets.html_ticket(ctx, venta)
 
+        # Piezas de la facturación electrónica que dependen de bibliotecas empaquetadas (sin usar Internet).
+        import segno
+
+        from .integraciones.arca import credenciales, transporte
+
+        assert b"CERTIFICATE REQUEST" in credenciales.generar_pedido("homologacion", "20-12345678-6", "Autoprueba")
+        assert credenciales.desproteger(credenciales.proteger(b"secreto")) == b"secreto", "falla el cifrado de la clave"
+        assert segno.make("prueba").png_data_uri().startswith("data:image/png"), "no se puede generar el QR"
+        transporte._contexto_compatible()
+
         ventana = VentanaPrincipal(ctx)  # no se muestra
         ventana.reloj_copias.stop()
         assert len(ventana.paginas) == len(MENU), "faltan pantallas del menú"

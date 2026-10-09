@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from ...core.dinero import D, a_centavos, a_milesimas, de_centavos, fmt_cantidad, fmt_dinero, fmt_pct, parse_decimal
 from ...core.errores import ErrorNegocio
+from ...integraciones import arca
 from ...servicios import tickets
 from ...servicios.caja import MEDIOS
 from ...servicios.ventas import calcular_totales
@@ -19,6 +20,7 @@ from ..comunes import (
     Buscador, CampoDecimal, Dialogo, Pagina, Tabla, boton, cd, confirmar, etiqueta, fila, panel,
 )
 from ..impresion import imprimir_directo, mostrar_comprobante
+from .facturacion import con_espera, mostrar_factura
 
 
 class DialogoCobro(Dialogo):
@@ -132,9 +134,10 @@ class DialogoDescuento(Dialogo):
 
 
 class DialogoVentaRegistrada(QDialog):
-    def __init__(self, padre, ctx, venta_id: int, vuelto_cent: int, pendiente: bool):
+    def __init__(self, padre, ctx, venta_id: int, vuelto_cent: int, pendiente: bool, factura=None, error_fiscal: str = ""):
         super().__init__(padre)
         self.ctx, self.venta_id = ctx, venta_id
+        self.servicio, self.factura = arca.crear_servicio(ctx), factura
         self.setWindowTitle("Venta registrada")
         self.setMinimumWidth(400)
         v = QVBoxLayout(self)
@@ -149,11 +152,38 @@ class DialogoVentaRegistrada(QDialog):
         if pendiente:
             v.addWidget(etiqueta("El pago quedó PENDIENTE: no se cuenta como cobrado. Cuando verifiques que el dinero "
                                  "ingresó, confirmalo desde «Historial de ventas».", "aviso", True))
+        self.l_fiscal = etiqueta("", "nota", True)
+        v.addWidget(self.l_fiscal)
+        self.b_factura = boton("Emitir factura", self.facturar)
         seguir = boton("Nueva venta  (Enter)", self.accept, "primario")
         seguir.setDefault(True)
         seguir.setAutoDefault(True)
-        v.addLayout(fila(boton("Imprimir ticket", self.imprimir), None, seguir))
+        v.addLayout(fila(boton("Imprimir ticket", self.imprimir), self.b_factura, None, seguir))
+        self.mostrar_fiscal(error_fiscal)
         seguir.setFocus()
+
+    def mostrar_fiscal(self, error: str = "") -> None:
+        disponible = self.servicio.estado().disponible
+        self.b_factura.setVisible(disponible or self.factura is not None)
+        if self.factura is not None:
+            c = self.factura
+            prueba = "  (PRUEBA, sin validez fiscal)" if c["entorno"] != "produccion" else ""
+            self.l_fiscal.setText(f"Factura {c['letra']} {int(c['punto_venta']):05d}-{int(c['numero']):08d} autorizada por ARCA. "
+                                  f"CAE {c['cae']}{prueba}")
+            self.b_factura.setText("Imprimir factura")
+        elif error:
+            self.l_fiscal.setText("No se emitió la factura: " + error)
+        self.l_fiscal.setVisible(self.factura is not None or bool(error))
+
+    def facturar(self) -> None:
+        if self.factura is None:
+            try:
+                self.factura = con_espera(lambda: self.servicio.autorizar_venta(self.venta_id))
+            except ErrorNegocio as e:
+                self.mostrar_fiscal(str(e))
+                return
+            self.mostrar_fiscal()
+        mostrar_factura(self, self.ctx, self.factura)
 
     def imprimir(self) -> None:
         mostrar_comprobante(self, self.ctx, tickets.html_ticket(self.ctx, self.venta_id), f"Ticket venta {self.venta_id}")
@@ -485,7 +515,16 @@ class PaginaVenta(Pagina):
                 imprimir_directo(self.ctx, tickets.html_ticket(self.ctx, venta_id))
             except Exception:
                 self.avisar("La venta se registró, pero no se pudo imprimir el ticket.", error=True)
-        DialogoVentaRegistrada(self, self.ctx, venta_id, vuelto, pendiente).exec()
+        # La venta ya está guardada: la factura se pide aparte y, si ARCA no responde, queda pendiente.
+        factura, error_fiscal = None, ""
+        if self.ctx.config.booleano("fiscal_automatico"):
+            servicio = arca.crear_servicio(self.ctx)
+            if servicio.estado().disponible:
+                try:
+                    factura = con_espera(lambda: servicio.autorizar_venta(venta_id))
+                except ErrorNegocio as e:
+                    error_fiscal = str(e)
+        DialogoVentaRegistrada(self, self.ctx, venta_id, vuelto, pendiente, factura, error_fiscal).exec()
         self.enfocar()
 
     def refrescar(self) -> None:

@@ -47,19 +47,19 @@ def html_ticket(ctx, venta_id: int) -> str:
         partes.append(f"Atendido por: {escape(v['usuario'])}<br>")
     if v["estado"] == "anulada":
         partes.append("<div class='c'><b>*** VENTA ANULADA ***</b></div>")
-    partes.append("<hr><table>")
+    partes.append("<hr><table width='100%'>")
     for i in ctx.ventas.items(venta_id):
         partes.append(f"<tr><td colspan='2'>{escape(i['nombre'])}</td></tr>")
         detalle = f"{fmt_cantidad(i['cantidad_mil'])} {i['unidad']} x {fmt_dinero(i['precio_unit_cent'])}"
         partes.append(f"<tr><td class='chico'>&nbsp;&nbsp;{escape(detalle)}</td><td class='d'>{fmt_dinero(i['bruto_cent'])}</td></tr>")
-    partes.append("</table><hr><table>")
+    partes.append("</table><hr><table width='100%'>")
     if v["descuento_cent"]:
         partes.append(_fila("Importe", fmt_dinero(v["bruto_cent"])))
         partes.append(_fila("Descuento", "- " + fmt_dinero(v["descuento_cent"])))
     partes.append(_fila("Subtotal sin impuestos", fmt_dinero(v["neto_cent"])))
     partes.append(_fila("Impuestos", fmt_dinero(v["impuestos_cent"])))
     partes.append(_fila("TOTAL", fmt_dinero(v["total_cent"]), "total"))
-    partes.append("</table><br><table>")
+    partes.append("</table><br><table width='100%'>")
     for p in ctx.ventas.pagos(venta_id):
         etiqueta = MEDIOS[p["medio"]] + ESTADOS_PAGO_TICKET[p["estado"]]
         if p["tipo"] == "devolucion":
@@ -81,17 +81,17 @@ def html_cierre_caja(ctx, caja_id: int) -> str:
     partes.append(f"Apertura: {fecha_legible(r['abierta_en'])} {escape(r['abierta_por'])}<br>")
     if r["cerrada_en"]:
         partes.append(f"Cierre: {fecha_legible(r['cerrada_en'])} {escape(r['cerrada_por'])}<br>")
-    partes.append("<hr><table>")
+    partes.append("<hr><table width='100%'>")
     partes.append(_fila(f"Ventas del día ({r['ventas_cantidad']})", d(r["ventas_total_cent"])))
     partes.append(_fila("Total efectivamente cobrado", d(r["cobrado_total_cent"])))
     partes.append(_fila("Pagos pendientes", d(r["pendientes_cent"])))
     partes.append(_fila(f"Devoluciones y anulaciones ({r['anuladas_cantidad']})", d(r["devoluciones_cent"])))
-    partes.append("</table><hr><b>Ingresos por medio de pago</b><table>")
+    partes.append("</table><hr><b>Ingresos por medio de pago</b><table width='100%'>")
     for medio, nombre in MEDIOS.items():
         partes.append(_fila(nombre, d(r["cobrado_cent"][medio])))
     partes.append(_fila("Comisiones de Mercado Pago", "- " + d(r["mp_comisiones_cent"])))
     partes.append(_fila("Mercado Pago neto recibido", d(r["mp_neto_cent"])))
-    partes.append("</table><hr><b>Efectivo en caja</b><table>")
+    partes.append("</table><hr><b>Efectivo en caja</b><table width='100%'>")
     partes.append(_fila("Saldo inicial", d(r["saldo_inicial_cent"])))
     partes.append(_fila("Ingresos en efectivo", d(r["cobrado_cent"]["efectivo"])))
     partes.append(_fila("Entradas manuales", d(r["entradas_cent"])))
@@ -103,7 +103,7 @@ def html_cierre_caja(ctx, caja_id: int) -> str:
     partes.append("</table>")
     movimientos = ctx.caja.movimientos(caja_id)
     if movimientos:
-        partes.append("<hr><b>Entradas y salidas manuales</b><table>")
+        partes.append("<hr><b>Entradas y salidas manuales</b><table width='100%'>")
         for m in movimientos:
             signo = "" if m["tipo"] == "entrada" else "- "
             partes.append(_fila(m["motivo"], signo + d(m["monto_cent"])))

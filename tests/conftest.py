@@ -1,13 +1,27 @@
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from micomercio.db import BaseDatos  # noqa: E402
 from micomercio.servicios import Contexto  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def app():
+    from PySide6.QtWidgets import QApplication
+
+    from micomercio.ui import tema
+
+    aplicacion = QApplication.instance() or QApplication([])
+    aplicacion.setStyleSheet(tema.HOJA_DE_ESTILO)
+    return aplicacion
 
 
 @pytest.fixture
