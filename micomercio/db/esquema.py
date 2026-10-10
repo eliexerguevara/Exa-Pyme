@@ -347,6 +347,10 @@ MIGRACIONES: list[str] = [
         actualizado TEXT NOT NULL
     );
     """,
+    # ---- versión 8: miniaturas para las listas ---------------------------------
+    """
+    ALTER TABLE producto_imagenes ADD COLUMN miniatura BLOB;
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)

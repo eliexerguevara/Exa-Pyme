@@ -38,3 +38,39 @@ def pixmap(datos: bytes | None, lado: int) -> QPixmap | None:
     if not imagen.loadFromData(QByteArray(datos)):
         return None
     return imagen.scaled(lado, lado, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+
+LADO_MINIATURA = 96
+
+
+def miniatura(datos: bytes) -> bytes:
+    """Versión chica de una imagen ya normalizada, para las listas."""
+    imagen = QImage()
+    if not imagen.loadFromData(QByteArray(datos)):
+        raise ErrorNegocio("No se pudo preparar la imagen.")
+    imagen = imagen.scaled(LADO_MINIATURA, LADO_MINIATURA, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    salida = QByteArray()
+    memoria = QBuffer(salida)
+    memoria.open(QIODevice.WriteOnly)
+    imagen.save(memoria, "JPG", 80)
+    return bytes(salida)
+
+
+class Miniaturas:
+    """Miniaturas ya pedidas al servidor, para no volver a traerlas cada vez que se redibuja una lista."""
+
+    def __init__(self, ctx, lado: int = 44):
+        self.ctx, self.lado, self.cache = ctx, lado, {}
+
+    def de(self, productos) -> dict[int, QPixmap]:
+        """productos: filas con «id» y «tiene_imagen». Devuelve {producto_id: imagen} de los que tienen."""
+        con_imagen = [p["id"] for p in productos if p["tiene_imagen"]]
+        faltan = [i for i in con_imagen if i not in self.cache]
+        if faltan:
+            recibidas = self.ctx.productos.miniaturas(faltan)
+            for identificador in faltan:
+                self.cache[identificador] = pixmap(recibidas.get(identificador), self.lado)
+        return {i: self.cache[i] for i in con_imagen if self.cache.get(i) is not None}
+
+    def olvidar(self) -> None:
+        self.cache.clear()

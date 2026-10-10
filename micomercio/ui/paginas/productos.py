@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QSize, Qt, QThread, QTimer, Signal, Slot
 
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
@@ -348,7 +348,8 @@ class DialogoProducto(Dialogo):
         ):
             return
         if self.imagen_cambiada:
-            datos.update(imagen=self.imagen, imagen_origen=self.imagen_origen, quitar_imagen=self.imagen is None)
+            datos.update(imagen=self.imagen, imagen_origen=self.imagen_origen, quitar_imagen=self.imagen is None,
+                         miniatura=imagenes.miniatura(self.imagen) if self.imagen else None)
         if self.producto_id:
             self.ctx.productos.actualizar(self.producto_id, datos)
         else:
@@ -485,13 +486,18 @@ class PaginaProductos(Pagina):
         self.b_imagenes = boton("Buscar imágenes", self.completar_imagenes,
                                 ayuda="Busca en el catálogo la imagen de cada producto que todavía no tiene, por su código de barras.")
         self.solo_edicion = [self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_masivo, self.b_importar, self.b_imagenes]
+        # Dos renglones: en pantallas angostas una sola fila cortaba los textos de los botones.
+        self.cuerpo.addLayout(fila(self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_imagenes, None))
         self.cuerpo.addLayout(fila(
-            self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, None, self.b_imagenes, self.b_masivo,
-            boton("Historial de precios", self.historial), self.b_importar, boton("Exportar CSV", self.exportar),
+            self.b_masivo, boton("Historial de precios", self.historial), None, self.b_importar, boton("Exportar CSV", self.exportar),
         ))
         self.tabla = Tabla(["Código", "Producto", "Categoría", "Precio Costo", "Impuestos",
                             "Ganancia", "Precio de venta final", "Disponible", "Estado"])
         self.tabla.activada.connect(self.editar)
+        # Filas más altas para que se vea la foto de cada producto.
+        self.tabla.setIconSize(QSize(44, 44))
+        self.tabla.verticalHeader().setDefaultSectionSize(52)
+        self.miniaturas = imagenes.Miniaturas(self.ctx, 44)
         self.cuerpo.addWidget(self.tabla, 1)
         self.pie = etiqueta("", "suave")
         self.cuerpo.addWidget(self.pie)
@@ -508,6 +514,7 @@ class PaginaProductos(Pagina):
         puede = self.ctx.puede("productos_editar")
         for b in self.solo_edicion:
             b.setVisible(puede)
+        self.miniaturas.olvidar()  # pudo cambiar alguna imagen
         self.cargar()
 
     def cargar(self) -> None:
@@ -522,8 +529,10 @@ class PaginaProductos(Pagina):
             ])
             if not p["activo"]:
                 colores[n] = "#9CA3AF"
-        self.tabla.cargar(filas, [p["id"] for p in productos], colores)
-        self.pie.setText(f"{len(productos)} productos")
+        fotos = self.miniaturas.de(productos)
+        iconos = {n: fotos[p["id"]] for n, p in enumerate(productos) if p["id"] in fotos}
+        self.tabla.cargar(filas, [p["id"] for p in productos], colores, iconos)
+        self.pie.setText(f"{len(productos)} productos  ·  {len(iconos)} con imagen")
 
     def nuevo(self) -> None:
         if DialogoProducto(self, self.ctx).exec():
@@ -575,7 +584,8 @@ class PaginaProductos(Pagina):
             try:
                 datos = buscar_imagen(self.ctx, producto["codigo_barras"])
                 if datos:
-                    self.ctx.productos.guardar_imagen(producto["id"], imagenes.normalizar(datos), "catalogo")
+                    lista = imagenes.normalizar(datos)
+                    self.ctx.productos.guardar_imagen(producto["id"], lista, "catalogo", imagenes.miniatura(lista))
                     encontradas += 1
             except catalogo_imagenes.SinConexion as e:
                 problema = str(e)

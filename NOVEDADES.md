@@ -1,2 +1,2 @@
-- Corrección: al abrir la ficha de un producto que ya tenía código de barras, ahora también se busca su imagen en el catálogo.
-- Si todavía no se eligió la carpeta del catálogo de imágenes, la ficha lo avisa.
+- La lista de Productos muestra la foto de cada producto, y el pie indica cuántos tienen imagen.
+- En la venta, cada producto del carrito aparece con su foto.

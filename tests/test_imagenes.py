@@ -241,3 +241,44 @@ def test_catalogo_en_una_carpeta_del_comercio(app, ctx, producto, tmp_path):
         assert remoto.productos.estado_catalogo()["imagenes"] == 2
     finally:
         servidor.detener()
+
+
+def test_las_listas_muestran_la_miniatura(app, ctx, producto, tmp_path):
+    from micomercio.ui.paginas import productos as modulo
+    from micomercio.ui.ventana import VentanaPrincipal
+
+    foto = imagenes.normalizar(imagen_de_prueba())
+    chica = imagenes.miniatura(foto)
+    assert chica[:3] == b"\xff\xd8\xff" and len(chica) < 5000
+    ctx.productos.guardar_imagen(producto, foto, "catalogo", chica)
+    sin_miniatura = ctx.productos.crear({"nombre": "Guardado con la versión anterior", "codigo_barras": "7790001000888", "stock": 5})
+    ctx.productos.guardar_imagen(sin_miniatura, foto)                     # sin miniatura: se usa la imagen completa
+    sin_foto = ctx.productos.crear({"nombre": "Sin foto"})
+    assert ctx.productos.miniaturas([producto, sin_miniatura, sin_foto, 9999]) == {producto: chica, sin_miniatura: foto}
+    ctx.productos.guardar_imagen(sin_foto, foto, "manual", b"no es una miniatura")   # una miniatura inválida se descarta
+    assert ctx.db.valor("SELECT miniatura FROM producto_imagenes WHERE producto_id = ?", (sin_foto,)) is None
+    ctx.productos.quitar_imagen(sin_foto)
+
+    ventana = VentanaPrincipal(ctx)
+    ventana.show()
+    ventana.ir("productos")
+    pagina = ventana.paginas["productos"]
+    con_icono = {pagina.tabla.item(r, 1).text(): not pagina.tabla.item(r, 1).icon().isNull() for r in range(pagina.tabla.rowCount())}
+    assert con_icono == {"Yerba 1 kg": True, "Guardado con la versión anterior": True, "Sin foto": False}
+    assert "2 con imagen" in pagina.pie.text()
+
+    # Al guardar desde la ficha, la miniatura se genera sola y la lista se actualiza.
+    d = modulo.DialogoProducto(None, ctx, sin_foto)
+    d.imagen, d.imagen_cambiada = foto, True
+    d.guardar()
+    assert ctx.db.valor("SELECT LENGTH(miniatura) FROM producto_imagenes WHERE producto_id = ?", (sin_foto,)) < 5000
+    pagina.refrescar()
+    assert "3 con imagen" in pagina.pie.text()
+
+    ctx.caja.abrir(0)
+    ventana.ir("venta")
+    venta = ventana.paginas["venta"]
+    venta.agregar(ctx.productos.obtener(producto))
+    venta.agregar(ctx.productos.crear({"nombre": "Otro sin foto", "stock": 2}) and ctx.productos.por_codigo(ctx.productos.buscar("Otro sin foto")[0]["codigo"]))
+    assert not venta.tabla.item(0, 1).icon().isNull() and venta.tabla.item(1, 1).icon().isNull()
+    ventana.close()

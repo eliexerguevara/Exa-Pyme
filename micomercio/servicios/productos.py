@@ -11,6 +11,7 @@ from ..rutas import carpeta_datos
 from . import catalogo_imagenes
 
 TAMANO_MAXIMO_IMAGEN = 400 * 1024
+TAMANO_MAXIMO_MINIATURA = 40 * 1024
 EXTENSIONES_CATALOGO = (".jpg", ".jpeg", ".png", ".webp")
 UNIDADES = ["unidad", "kg", "g", "litro", "ml", "metro", "caja", "pack", "docena"]
 
@@ -208,7 +209,7 @@ class Productos:
             producto_id = cur.lastrowid
             self._aplicar_precio(producto_id, None, campos, origen)
             if d.get("imagen"):
-                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual")
+                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual", d.get("miniatura"))
             if stock > 0:
                 self.ctx.inventario.mover(producto_id, a_milesimas(stock), "inicial", "Stock inicial", "producto", producto_id)
         return producto_id
@@ -236,7 +237,7 @@ class Productos:
             if d.get("quitar_imagen"):
                 self.db.ejecutar("DELETE FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
             elif d.get("imagen"):
-                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual")
+                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual", d.get("miniatura"))
             if anterior["precio_final_cent"] != campos["precio_final_cent"] or anterior["costo_cent"] != campos["costo_cent"]:
                 self.ctx.auditar(
                     "cambio_precio", "productos", producto_id,
@@ -248,23 +249,41 @@ class Productos:
     def imagen(self, producto_id: int) -> bytes | None:
         return self.db.valor("SELECT datos FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
 
-    def _poner_imagen(self, producto_id: int, datos: bytes, origen: str) -> None:
+    def _poner_imagen(self, producto_id: int, datos: bytes, origen: str, miniatura: bytes | None = None) -> None:
         if not isinstance(datos, (bytes, bytearray)) or bytes(datos[:3]) != b"\xff\xd8\xff":
             raise ErrorNegocio("La imagen del producto no es válida.")
         if len(datos) > TAMANO_MAXIMO_IMAGEN:
             raise ErrorNegocio("La imagen del producto es demasiado grande.")
+        # La miniatura es opcional: si no viene o no sirve, las listas usan la imagen completa.
+        if not (isinstance(miniatura, (bytes, bytearray)) and bytes(miniatura[:3]) == b"\xff\xd8\xff"
+                and len(miniatura) <= TAMANO_MAXIMO_MINIATURA):
+            miniatura = None
+        else:
+            miniatura = bytes(miniatura)
         self.db.ejecutar(
-            """INSERT INTO producto_imagenes (producto_id, datos, origen, actualizado) VALUES (?,?,?,?)
+            """INSERT INTO producto_imagenes (producto_id, datos, origen, actualizado, miniatura) VALUES (?,?,?,?,?)
                ON CONFLICT(producto_id) DO UPDATE SET datos = excluded.datos, origen = excluded.origen,
-               actualizado = excluded.actualizado""",
-            (producto_id, bytes(datos), "catalogo" if origen == "catalogo" else "manual", ahora()),
+               actualizado = excluded.actualizado, miniatura = excluded.miniatura""",
+            (producto_id, bytes(datos), "catalogo" if origen == "catalogo" else "manual", ahora(), miniatura),
         )
 
-    def guardar_imagen(self, producto_id: int, datos: bytes, origen: str = "manual") -> None:
+    def guardar_imagen(self, producto_id: int, datos: bytes, origen: str = "manual", miniatura: bytes | None = None) -> None:
         self.ctx.requiere("productos_editar")
         with self.db.transaccion():
             self.obtener(producto_id)
-            self._poner_imagen(producto_id, datos, origen)
+            self._poner_imagen(producto_id, datos, origen, miniatura)
+
+    def miniaturas(self, ids: list[int]) -> dict[int, bytes]:
+        """Imágenes chicas de varios productos, para mostrarlas en las listas: {producto_id: imagen}"""
+        resultado, ids = {}, [int(i) for i in ids][:5000]
+        for desde in range(0, len(ids), 400):
+            grupo = ids[desde:desde + 400]
+            for f in self.db.consultar(
+                f"SELECT producto_id, COALESCE(miniatura, datos) AS imagen FROM producto_imagenes "
+                f"WHERE producto_id IN ({','.join('?' * len(grupo))})", grupo,
+            ):
+                resultado[f["producto_id"]] = f["imagen"]
+        return resultado
 
     def quitar_imagen(self, producto_id: int) -> None:
         self.ctx.requiere("productos_editar")

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from PySide6.QtCore import QDate, Qt, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -181,8 +181,9 @@ class Tabla(QTableWidget):
         self.setSortingEnabled(ordenable)
         self.doubleClicked.connect(lambda _: self.activada.emit())
 
-    def cargar(self, filas: list[list], ids: list | None = None, colores: dict[int, str] | None = None) -> None:
-        """colores: {número de fila: color del texto}"""
+    def cargar(self, filas: list[list], ids: list | None = None, colores: dict[int, str] | None = None,
+               iconos: dict[int, object] | None = None, columna_icono: int = 1) -> None:
+        """colores: {número de fila: color del texto} · iconos: {número de fila: imagen para mostrar en esa fila}"""
         seleccion = self.id_actual()
         ordenable = self.isSortingEnabled()
         self.setSortingEnabled(False)
@@ -200,6 +201,8 @@ class Tabla(QTableWidget):
                     celda.setData(Qt.UserRole, ids[r])
                 if colores and r in colores:
                     celda.setForeground(QColor(colores[r]))
+                if iconos and c == columna_icono and r in iconos:
+                    celda.setIcon(QIcon(iconos[r]))
                 self.setItem(r, c, celda)
         self.setSortingEnabled(ordenable)
         if seleccion is not None:

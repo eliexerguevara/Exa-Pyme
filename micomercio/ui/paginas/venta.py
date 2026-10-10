@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QDialog, QGridLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QRadioButton, QVBoxLayout,
@@ -297,6 +297,9 @@ class PaginaVenta(Pagina):
 
         self.tabla = Tabla(["Código", "Producto", "Cantidad", "Precio", "Importe"], ordenable=False)
         self.tabla.activada.connect(self.cambiar_cantidad)
+        self.tabla.setIconSize(QSize(40, 40))
+        self.tabla.verticalHeader().setDefaultSectionSize(46)
+        self.miniaturas = imagenes.Miniaturas(self.ctx, 40)
         self.tabla.installEventFilter(self)
         izquierda = QVBoxLayout()
         izquierda.setSpacing(8)
@@ -462,7 +465,7 @@ class PaginaVenta(Pagina):
                 self.carrito.append({
                     "producto_id": producto["id"], "codigo": producto["codigo"], "nombre": producto["nombre"],
                     "unidad": producto["unidad"], "cantidad": cantidad, "precio_unit_cent": producto["precio_final_cent"],
-                    "impuesto_pct": producto["impuesto_pct"],
+                    "impuesto_pct": producto["impuesto_pct"], "id": producto["id"], "tiene_imagen": producto["tiene_imagen"],
                 })
                 linea = self.carrito[-1]
         except ErrorNegocio as e:
@@ -554,7 +557,9 @@ class PaginaVenta(Pagina):
         t = self.totales()
         self.tabla.cargar([[l["codigo"], l["nombre"], (f"{fmt_cantidad(a_milesimas(l['cantidad']))} {l['unidad']}", 0),
                             cd(l["precio_unit_cent"]), cd(tl["bruto_cent"])]
-                           for l, tl in zip(self.carrito, t["lineas"])])
+                           for l, tl in zip(self.carrito, t["lineas"])],
+                          iconos={n: foto for n, l in enumerate(self.carrito)
+                                  if (foto := self.miniaturas.de([l]).get(l["id"])) is not None})
         if seleccionar is not None and self.carrito:
             self.tabla.selectRow(seleccionar)
             self.tabla.scrollToItem(self.tabla.item(seleccionar, 0))
