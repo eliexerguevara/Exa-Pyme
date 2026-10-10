@@ -57,8 +57,12 @@ class PaginaCaja(Pagina):
         self.b_entrada = boton("Entrada de efectivo", lambda: self.movimiento("entrada"))
         self.b_salida = boton("Salida de efectivo", lambda: self.movimiento("salida"))
         self.b_cerrar = boton("Cerrar caja", self.cerrar, "primario")
-        self.cuerpo.addLayout(fila(self.b_abrir, self.b_entrada, self.b_salida, self.b_cerrar, None,
+        self.b_cerrar_otra = boton("Cerrar la caja seleccionada", self.cerrar_otra,
+                                   ayuda="Para cerrar la caja de otra computadora que quedó abierta.")
+        self.cuerpo.addLayout(fila(self.b_abrir, self.b_entrada, self.b_salida, self.b_cerrar, None, self.b_cerrar_otra,
                                    boton("Imprimir resumen", self.imprimir)))
+        self.otras = etiqueta("", "nota", True)
+        self.cuerpo.addWidget(self.otras)
         self.titulo_resumen = etiqueta("", "subtitulo")
         self.cuerpo.addWidget(self.titulo_resumen)
         self.resumen = ResumenCaja()
@@ -67,8 +71,8 @@ class PaginaCaja(Pagina):
         self.cuerpo.addWidget(etiqueta("Jornadas de caja", "subtitulo"))
         self.cuerpo.addWidget(etiqueta("Seleccioná una jornada para ver su resumen. Las entradas y salidas manuales "
                                        "aparecen a la derecha.", "suave"))
-        self.tabla = Tabla(["N°", "Apertura", "Cierre", "Abrió", "Efectivo esperado", "Efectivo contado", "Diferencia", "Estado"],
-                           estirar=3, minimo=110)
+        self.tabla = Tabla(["N°", "Caja", "Apertura", "Cierre", "Abrió", "Efectivo esperado", "Efectivo contado", "Diferencia", "Estado"],
+                           estirar=4, minimo=110)
         self.tabla.itemSelectionChanged.connect(self.mostrar_seleccion)
         self.movimientos = Tabla(["Hora", "Tipo", "Importe", "Motivo"], estirar=3, ordenable=False, minimo=120)
         self.movimientos.setMaximumWidth(400)
@@ -76,17 +80,22 @@ class PaginaCaja(Pagina):
 
     def refrescar(self) -> None:
         abierta = self.ctx.caja.abierta()
-        self.estado.setText("ABIERTA" if abierta else "CERRADA")
+        self.estado.setText(f"{self.ctx.puesto}: " + ("ABIERTA" if abierta else "CERRADA"))
         self.estado.setStyleSheet(
             "background: #DCFCE7; color: #166534;" if abierta else "background: #FEE2E2; color: #991B1B;")
         self.b_abrir.setVisible(not abierta)
         for b in (self.b_entrada, self.b_salida, self.b_cerrar):
             b.setVisible(bool(abierta))
         cajas = self.ctx.caja.listar()
+        self.cajas = {c["id"]: c for c in cajas}
+        ajenas = [c for c in self.ctx.caja.abiertas() if c["puesto"].lower() != self.ctx.puesto.lower()]
+        self.otras.setText("Otras cajas abiertas ahora: " + ", ".join(
+            f"{c['puesto']} ({c['abierta_por_nombre']})" for c in ajenas) + ".")
+        self.otras.setVisible(bool(ajenas))
         filas = []
         for c in cajas:
             esperado = c["efectivo_esperado_cent"]
-            filas.append([(str(c["id"]), c["id"]), cf(c["abierta_en"]), cf(c["cerrada_en"]), c["abierta_por_nombre"],
+            filas.append([(str(c["id"]), c["id"]), c["puesto"], cf(c["abierta_en"]), cf(c["cerrada_en"]), c["abierta_por_nombre"],
                           cd(esperado) if esperado is not None else "", cd(c["efectivo_contado_cent"]) if esperado is not None else "",
                           cd(c["diferencia_cent"]) if esperado is not None else "", "Abierta" if c["estado"] == "abierta" else "Cerrada"])
         self.tabla.blockSignals(True)
@@ -103,13 +112,16 @@ class PaginaCaja(Pagina):
             self.resumen.mostrar(None)
             self.movimientos.cargar([])
             self.titulo_resumen.setText("Todavía no se abrió ninguna caja")
+            self.b_cerrar_otra.hide()
             return
         r = self.ctx.caja.resumen(caja_id)
         self.resumen.mostrar(r)
         if r["estado"] == "abierta":
-            self.titulo_resumen.setText(f"Caja N° {caja_id} · abierta desde el {fecha_legible(r['abierta_en'])}")
+            self.titulo_resumen.setText(f"{r['puesto']} · jornada N° {caja_id} · abierta desde el {fecha_legible(r['abierta_en'])}")
         else:
-            self.titulo_resumen.setText(f"Caja N° {caja_id} · del {fecha_legible(r['abierta_en'])} al {fecha_legible(r['cerrada_en'])}")
+            self.titulo_resumen.setText(f"{r['puesto']} · jornada N° {caja_id} · del {fecha_legible(r['abierta_en'])} al {fecha_legible(r['cerrada_en'])}")
+        ajena_abierta = r["estado"] == "abierta" and r["puesto"].lower() != self.ctx.puesto.lower()
+        self.b_cerrar_otra.setVisible(ajena_abierta and self.ctx.puede("cajas_todas"))
         self.movimientos.cargar([[cf(m["fecha"]), "Entrada" if m["tipo"] == "entrada" else "Salida",
                                   cd(m["monto_cent"]), m["motivo"]] for m in self.ctx.caja.movimientos(caja_id)])
 
@@ -137,7 +149,7 @@ class PaginaCaja(Pagina):
         r = self.ctx.caja.resumen(caja["id"])
         if r["pendientes_cent"] and not confirmar(
             self, f"Hay pagos pendientes por {fmt_dinero(r['pendientes_cent'])} que todavía no se confirmaron.\n\n"
-                  "Podés cerrar igual: cuando los confirmes, van a contar en la caja que esté abierta en ese momento.",
+                  "Podés cerrar igual: cuando los confirmes, van a contar en la caja de la computadora que los confirme.",
             "Cerrar igual"):
             return
         dialogo = DialogoCierre(self, r["efectivo_esperado_cent"])
@@ -148,6 +160,18 @@ class PaginaCaja(Pagina):
         self.tabla.seleccionar_id(caja["id"])
         if confirmar(self, "La caja quedó cerrada.\n\n¿Querés ver el reporte del cierre para imprimirlo?", "Ver reporte", "No"):
             mostrar_comprobante(self, self.ctx, tickets.html_cierre_caja(self.ctx, caja["id"]), f"Cierre de caja {caja['id']}")
+
+    def cerrar_otra(self) -> None:
+        caja_id = self.tabla.id_requerido("Seleccioná una jornada de caja de la lista.")
+        r = self.ctx.caja.resumen(caja_id)
+        if not confirmar(self, f"Vas a cerrar la caja «{r['puesto']}», que pertenece a otra computadora.\n\n"
+                               "Hacelo solo si esa computadora ya no la va a usar hoy: contá el efectivo de ese cajón.", "Continuar"):
+            return
+        dialogo = DialogoCierre(self, r["efectivo_esperado_cent"])
+        if dialogo.exec():
+            self.ctx.caja.cerrar(a_centavos(dialogo.contado.valor()), dialogo.notas.text(), caja_id)
+            self.refrescar()
+            self.tabla.seleccionar_id(caja_id)
 
     def imprimir(self) -> None:
         caja_id = self.tabla.id_requerido("Seleccioná una jornada de caja de la lista.")

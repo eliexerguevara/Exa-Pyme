@@ -81,7 +81,7 @@ def html_cierre_caja(ctx, caja_id: int) -> str:
     d = fmt_dinero
     partes = [ESTILO, f"<div class='c'><h1>{escape(ctx.config.obtener('comercio_nombre'))}</h1>"]
     titulo = "Cierre de caja" if r["estado"] == "cerrada" else "Resumen de caja (abierta)"
-    partes.append(f"<b>{titulo} N° {caja_id}</b></div><hr>")
+    partes.append(f"<b>{titulo} N° {caja_id}</b><br>{escape(r['puesto'])}</div><hr>")
     partes.append(f"Apertura: {fecha_legible(r['abierta_en'])} {escape(r['abierta_por'])}<br>")
     if r["cerrada_en"]:
         partes.append(f"Cierre: {fecha_legible(r['cerrada_en'])} {escape(r['cerrada_por'])}<br>")

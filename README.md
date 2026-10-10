@@ -150,7 +150,9 @@ un **cliente** (se conecta al servidor con su IP y su puerto; hay una casilla pa
   públicas de los servicios; las internas están bloqueadas (`SERVICIOS` y `BLOQUEADOS` en `red/servidor.py`).
 - Cliente y servidor deben tener la misma versión.
 - La base admite varios hilos: un candado hace que cada transacción se ejecute completa antes de la siguiente.
-- La caja diaria es una sola para todas las computadoras. La impresora se configura en cada una.
+- Cada computadora tiene su propia caja diaria (`cajas.puesto`), con su arqueo. Los cobros y devoluciones cuentan en
+  la caja de la computadora que los registra. El administrador puede cerrar la caja de otra computadora.
+- La impresora se configura en cada computadora.
 
 Las pruebas (`tests/test_red.py`) levantan un servidor real en la misma máquina y conectan clientes por la red local
 (127.0.0.1), incluidas cuatro cajas vendiendo a la vez. No se probó entre dos computadoras físicas distintas.
@@ -159,5 +161,5 @@ Las pruebas (`tests/test_red.py`) levantan un servidor real en la misma máquina
 
 - Mercado Pago: no hace devoluciones ni recibe notificaciones (webhooks); no cobra con Point ni con link de pago.
 - Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
-- Red: una caja diaria por computadora (hoy es una sola compartida); trabajar si el servidor está apagado.
+- Red: los clientes no pueden trabajar si el servidor está apagado.
 - Recuperación de la contraseña del administrador si se la olvida.

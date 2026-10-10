@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QLineEdit, QSpinBox, QVBoxLayout, QWidget
 
 from ... import preferencias
+from ...core.errores import ErrorNegocio
 from ...red.servidor import direcciones_locales
 from ..comunes import Tabla, boton, confirmar, etiqueta, fila, informar, panel
 
@@ -22,6 +23,10 @@ class PanelRed(QWidget):
         self.activa = QCheckBox("Permitir que otras computadoras se conecten a esta")
         self.puerto = QSpinBox()
         self.puerto.setRange(1024, 65535)
+        self.puesto = QLineEdit()
+        self.puesto.setMaxLength(40)
+        self.puesto.setMaximumWidth(260)
+        vs.addLayout(fila(etiqueta("Nombre de la caja de esta computadora:"), self.puesto, None))
         vs.addLayout(fila(self.activa, 16, etiqueta("Puerto:"), self.puerto, boton("Guardar", self.guardar, "primario"), None))
         self.direcciones = etiqueta("", "subtitulo", True)
         vs.addWidget(self.direcciones)
@@ -31,7 +36,7 @@ class PanelRed(QWidget):
             "tiene que estar encendida con Exa Pyme abierto. Conviene que esta computadora tenga siempre la misma IP.",
             "suave", True))
         vs.addWidget(etiqueta("Computadoras conectadas ahora", "subtitulo"))
-        self.tabla = Tabla(["Usuario", "Dirección", "Última actividad"], estirar=0, ordenable=False)
+        self.tabla = Tabla(["Caja", "Usuario", "Dirección", "Última actividad"], estirar=1, ordenable=False)
         self.tabla.setMaximumHeight(180)
         vs.addWidget(self.tabla)
         vs.addLayout(fila(boton("Actualizar lista", self.refrescar), None))
@@ -46,18 +51,20 @@ class PanelRed(QWidget):
         self.marco_servidor.setVisible(not remoto)
         if remoto:
             cliente = self.ctx.cliente
-            self.estado.setText(f"Esta computadora es un CLIENTE. Está conectada al servidor {cliente.host}, puerto {cliente.puerto}. "
-                                "Los datos del comercio están en esa computadora.")
+            self.estado.setText(f"Esta computadora es un CLIENTE («{self.ctx.puesto}»). Está conectada al servidor {cliente.host}, "
+                                f"puerto {cliente.puerto}. Los datos del comercio están en esa computadora. El nombre de la "
+                                "caja se cambia en la pantalla de ingreso.")
             return
         servidor = self.ventana.servidor
         self.activa.setChecked(bool(prefs["red_activa"]))
+        self.puesto.setText(self.ctx.puesto)
         self.puerto.setValue(int(prefs["red_puerto"]))
         if servidor is not None and servidor.activo:
             ips = direcciones_locales()
             self.estado.setText("El servidor está activo: otras computadoras pueden conectarse.")
             self.direcciones.setText("En las otras computadoras escribí:   IP  " + "  o  ".join(ips) + f"     Puerto  {servidor.puerto}")
             conectados = servidor.conectados()
-            self.tabla.cargar([[c["usuario"], c["ip"], "recién" if c["hace"] < 60 else f"hace {c['hace'] // 60} min"]
+            self.tabla.cargar([[c["puesto"], c["usuario"], c["ip"], "recién" if c["hace"] < 60 else f"hace {c['hace'] // 60} min"]
                                for c in conectados])
         else:
             self.estado.setText("Esta computadora trabaja sola: ninguna otra puede conectarse. Para sumar otras cajas, "
@@ -67,7 +74,14 @@ class PanelRed(QWidget):
 
     def guardar(self) -> None:
         self.ctx.requiere("configuracion")
-        preferencias.guardar(red_activa=self.activa.isChecked(), red_puerto=self.puerto.value())
+        nombre = " ".join(self.puesto.text().split())
+        if not nombre:
+            raise ErrorNegocio("Escribí un nombre para la caja de esta computadora.")
+        if nombre.lower() != self.ctx.puesto.lower():
+            if self.ctx.caja.abierta() is not None:
+                raise ErrorNegocio("Cerrá la caja de esta computadora antes de cambiarle el nombre.")
+            self.ctx.puesto = nombre
+        preferencias.guardar(red_activa=self.activa.isChecked(), red_puerto=self.puerto.value(), puesto=nombre)
         self.ventana.aplicar_red()
         self.refrescar()
         informar(self, "La configuración de red se guardó.")

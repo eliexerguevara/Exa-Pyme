@@ -1,4 +1,4 @@
-- Varias computadoras: una es el servidor (guarda los datos) y las demás se conectan como clientes con su IP y su puerto.
-- Al instalar, el programa pregunta si la computadora es servidor o cliente. Las instalaciones existentes siguen como servidor.
-- En Configuración → Red se permite que otras computadoras se conecten y se ven la IP, el puerto y quiénes están conectados.
-- El cliente y el servidor deben tener la misma versión: actualizá primero el servidor.
+- Una caja diaria por cada computadora, con su propio saldo inicial, movimientos y arqueo al cierre.
+- En la pantalla de ingreso de cada cliente se pone el nombre de su caja (por ejemplo «Caja 2»); el de la principal se cambia en Configuración → Red.
+- El administrador ve las jornadas de todas las cajas, puede cerrar la de otra computadora y tiene el reporte «Cierres de caja por computadora».
+- Actualizá primero el servidor y después cada cliente.

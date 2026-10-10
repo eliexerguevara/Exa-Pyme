@@ -137,7 +137,7 @@ def test_venta_completa_con_lector(ventana, ctx, producto, monkeypatch):
     assert ctx.db.valor("SELECT COUNT(*) FROM ventas") == 1
     assert ctx.productos.obtener(producto)["stock_mil"] == 6000
     assert pagina.carrito == [] and pagina.l_total.text() == "$ 0,00"
-    assert ventana.estado_caja.text() == "Caja abierta"
+    assert ventana.estado_caja.text() == "Caja principal: abierta"
 
     ventana.ir("historial")
     assert ventana.paginas["historial"].tabla.rowCount() == 1

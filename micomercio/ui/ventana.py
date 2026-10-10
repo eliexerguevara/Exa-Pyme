@@ -170,7 +170,7 @@ class VentanaPrincipal(QMainWindow):
             self.estado_red.setText("")
         self.estado_red.setVisible(bool(self.estado_red.text()))
         abierta = self.ctx.caja.abierta() is not None
-        self.estado_caja.setText("Caja abierta" if abierta else "Caja cerrada")
+        self.estado_caja.setText(f"{self.ctx.puesto}: " + ("abierta" if abierta else "cerrada"))
         self.estado_caja.setStyleSheet(
             "background: #DCFCE7; color: #166534;" if abierta else "background: #FEE2E2; color: #991B1B;")
 
@@ -192,7 +192,7 @@ class VentanaPrincipal(QMainWindow):
             self.servidor.detener()
         self.servidor = None
         if prefs["red_activa"]:
-            servidor = Servidor(self.ctx.db, int(prefs["red_puerto"]))
+            servidor = Servidor(self.ctx.db, int(prefs["red_puerto"]), self.ctx.puesto)
             servidor.iniciar()
             self.servidor = servidor
         self.actualizar_estado()

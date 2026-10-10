@@ -79,6 +79,7 @@ def main() -> int:
                     return 1
                 servidor = _iniciar_servidor(db)
                 ctx = Contexto(db)
+                ctx.puesto = _puesto_propio()
                 dialogo = DialogoIngreso(ctx) if ctx.usuarios.hay_usuarios() else DialogoPrimerUso(ctx)
                 if not dialogo.exec():
                     return 0
@@ -118,6 +119,12 @@ def _elegir_modo() -> str:
     return _preguntar_modo()
 
 
+def _puesto_propio() -> str:
+    from .servicios.contexto import PUESTO_PRINCIPAL
+
+    return preferencias.leer()["puesto"] or PUESTO_PRINCIPAL
+
+
 def _abrir_base():
     try:
         return BaseDatos(ruta_base_datos())
@@ -140,7 +147,7 @@ def _iniciar_servidor(db):
         return None
     from .red.servidor import Servidor
 
-    servidor = Servidor(db, int(prefs["red_puerto"]))
+    servidor = Servidor(db, int(prefs["red_puerto"]), _puesto_propio())
     try:
         servidor.iniciar()
     except ErrorNegocio as e:

@@ -133,9 +133,13 @@ class DialogoConexion(Dialogo):
         self.recordar.setChecked(bool(prefs["servidor_host"]))
         self.usuario, self.clave = QLineEdit(), QLineEdit()
         self.clave.setEchoMode(QLineEdit.Password)
+        self.puesto = QLineEdit(prefs["puesto"] or preferencias.nombre_equipo())
+        self.puesto.setMaxLength(40)
+        self.puesto.setToolTip("Cada computadora tiene su propia caja diaria. Poné un nombre distinto en cada una, por ejemplo «Caja 2».")
         self.formulario.addRow("IP del servidor:", self.host)
         self.formulario.addRow("Puerto:", self.puerto)
         self.formulario.addRow("", self.recordar)
+        self.formulario.addRow("Nombre de esta caja:", self.puesto)
         self.formulario.addRow("Usuario:", self.usuario)
         self.formulario.addRow("Contraseña:", self.clave)
         self.terminar()
@@ -174,12 +178,14 @@ class DialogoConexion(Dialogo):
             raise ErrorNegocio("Escribí la dirección IP del servidor.")
         if not self.usuario.text().strip():
             raise ErrorNegocio("Escribí tu usuario.")
+        if not self.puesto.text().strip():
+            raise ErrorNegocio("Escribí un nombre para esta caja, por ejemplo «Caja 2».")
         # La huella guardada vale solo para el mismo servidor; con otra dirección se confía en el nuevo.
         huella = self.huella if (host, puerto) == self.origen else ""
         ctx = ContextoRemoto(Cliente(host, puerto, huella))
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            ctx.ingresar(self.usuario.text(), self.clave.text())
+            ctx.ingresar(self.usuario.text(), self.clave.text(), self.puesto.text().strip())
         finally:
             QApplication.restoreOverrideCursor()
         return ctx
@@ -196,6 +202,7 @@ class DialogoConexion(Dialogo):
             self.clave.clear()
             self.clave.setFocus()
             raise
+        preferencias.guardar(puesto=ctx.puesto)
         if self.recordar.isChecked():
             preferencias.guardar(servidor_host=ctx.cliente.host, servidor_puerto=ctx.cliente.puerto, servidor_huella=ctx.cliente.huella)
         else:

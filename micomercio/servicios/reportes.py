@@ -53,6 +53,7 @@ class Reportes:
         ("movimientos", "Movimientos de inventario"),
         ("valor_stock", "Precio Costo y valor del stock"),
         ("descuentos", "Devoluciones y descuentos"),
+        ("cajas", "Cierres de caja por computadora"),
     ]
 
     def generar(self, clave: str, desde: str, hasta: str) -> Reporte:
@@ -262,3 +263,17 @@ class Reportes:
         columnas = [("Venta N°", "entero"), ("Fecha", "fecha"), ("Tipo", "texto"), ("Importe", "dinero"),
                     ("Total de la venta", "dinero"), ("Motivo", "texto"), ("Usuario", "texto")]
         return Reporte("Devoluciones y descuentos", columnas, filas)
+
+    def cajas(self, desde: str, hasta: str) -> Reporte:
+        inicio, fin = rango_dias(desde, hasta)
+        filas = []
+        for c in self.db.consultar("SELECT id FROM cajas WHERE abierta_en >= ? AND abierta_en < ? ORDER BY id DESC", (inicio, fin)):
+            r = self.ctx.caja.resumen(c["id"])
+            filas.append([r["caja_id"], r["puesto"], r["abierta_en"], r["cerrada_en"], r["abierta_por"], r["ventas_cantidad"],
+                          r["ventas_total_cent"], r["cobrado_total_cent"], r["cobrado_cent"]["efectivo"], r["efectivo_esperado_cent"],
+                          r["efectivo_contado_cent"], r["diferencia_cent"]])
+        columnas = [("N°", "entero"), ("Caja", "texto"), ("Apertura", "fecha"), ("Cierre", "fecha"), ("Abrió", "texto"),
+                    ("Ventas", "entero"), ("Total vendido", "dinero"), ("Total cobrado", "dinero"), ("Efectivo", "dinero"),
+                    ("Efectivo esperado", "dinero"), ("Efectivo contado", "dinero"), ("Diferencia", "dinero")]
+        return Reporte("Cierres de caja por computadora", columnas, filas,
+                       "Cada computadora tiene su propia caja. Las que siguen abiertas no tienen cierre ni diferencia.")

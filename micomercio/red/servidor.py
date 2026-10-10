@@ -131,13 +131,15 @@ class Sesion:
     ctx: object
     ip: str
     usuario: str
+    puesto: str = ""
     ultimo_uso: float = field(default_factory=time.time)
     servicios: dict = field(default_factory=dict)
 
 
 class Servidor:
-    def __init__(self, db, puerto: int):
+    def __init__(self, db, puerto: int, puesto_propio: str = "Caja principal"):
         self.db, self.puerto = db, int(puerto)
+        self.puesto_propio = puesto_propio  # nombre de la caja de esta computadora: ningún cliente puede usarlo
         self.sesiones: dict[str, Sesion] = {}
         self.fallos: dict[str, list[float]] = {}
         self.candado = threading.Lock()
@@ -202,7 +204,7 @@ class Servidor:
         with self.candado:
             for token in [t for t, s in self.sesiones.items() if s.ultimo_uso < limite]:
                 del self.sesiones[token]
-            return [{"usuario": s.usuario, "ip": s.ip, "hace": int(time.time() - s.ultimo_uso)} for s in self.sesiones.values()]
+            return [{"usuario": s.usuario, "puesto": s.puesto, "ip": s.ip, "hace": int(time.time() - s.ultimo_uso)} for s in self.sesiones.values()]
 
     # ---- pedidos ---------------------------------------------------------
     def atender(self, pedido: dict, ip: str) -> dict:
@@ -245,7 +247,17 @@ class Servidor:
                 f"Esta computadora tiene la versión {pedido.get('version')} de Exa Pyme y el servidor la {__version__}. "
                 "Las dos tienen que tener la misma versión: actualizá el programa."
             )
+        puesto = " ".join(str(pedido.get("puesto") or f"Equipo {ip}").split())[:40]
+        with self.candado:
+            ocupado = puesto.lower() == self.puesto_propio.lower() or any(
+                s.puesto.lower() == puesto.lower() and s.ip != ip and ahora - s.ultimo_uso < 300 for s in self.sesiones.values())
+        if ocupado:
+            raise ErrorNegocio(
+                f"Ya hay otra computadora que usa el nombre de caja «{puesto}». Cada computadora necesita un nombre "
+                "distinto: cambialo en la pantalla de ingreso."
+            )
         ctx = Contexto(self.db)
+        ctx.puesto = puesto
         try:
             usuario = ctx.usuarios.iniciar_sesion(str(pedido.get("usuario", "")), str(pedido.get("clave", "")))
         except ErrorNegocio:
@@ -254,9 +266,9 @@ class Servidor:
             raise
         token = secrets.token_urlsafe(32)
         with self.candado:
-            self.sesiones[token] = Sesion(ctx, ip, usuario["nombre"])
+            self.sesiones[token] = Sesion(ctx, ip, usuario["nombre"], puesto)
         log.info("Ingreso desde la red: %s (%s)", usuario["usuario"], ip)
-        return {"sesion": token, "usuario": usuario, "permisos": sorted(PERMISOS.get(usuario["rol"], set())),
+        return {"sesion": token, "usuario": usuario, "puesto": puesto, "permisos": sorted(PERMISOS.get(usuario["rol"], set())),
                 "version": __version__}
 
     def _sesion(self, token) -> Sesion:

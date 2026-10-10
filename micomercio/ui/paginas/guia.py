@@ -115,7 +115,8 @@ Precio de venta sin impuestos $ 14.285,71 → Precio de venta final $ 17.285,71.
     ("4. Abrir la caja", """
 <h2>Abrir la caja</h2>
 <p>La caja se abre al empezar la jornada y se cierra al terminar. Todo lo que se vende y se cobra queda anotado
-en la caja que está abierta.</p>
+en la caja que está abierta. Si el comercio tiene varias computadoras, cada una tiene su propia caja: se abre y
+se cierra en cada una (ver el tema 17).</p>
 <ol>
   <li>Entrá a <b>Caja diaria</b> y pulsá <b>Abrir caja</b>.</li>
   <li>Contá el efectivo que hay en el cajón y escribilo en <b>Saldo inicial</b>. El programa propone el importe
@@ -478,13 +479,21 @@ Una computadora es el <b>servidor</b> (la principal: guarda los datos) y las dem
   <li>Instalá Exa Pyme y elegí <b>Cliente</b>.</li>
   <li>Escribí la <b>IP</b> y el <b>puerto</b> del servidor.</li>
   <li>Tildá <b>«Recordar la IP y el puerto en esta computadora»</b> para no tener que escribirlos cada vez.</li>
+  <li>En <b>Nombre de esta caja</b> poné un nombre distinto en cada computadora (por ejemplo «Caja 2»): con ese
+      nombre figuran sus jornadas de caja. Conviene no cambiarlo después.</li>
   <li>Escribí tu <b>usuario</b> y tu <b>contraseña</b> y pulsá <b>Ingresar</b>. La contraseña nunca queda guardada.</li>
 </ol>
 <h3>Cómo se trabaja</h3>
 <ul>
   <li>Todas las computadoras ven los mismos datos al instante: lo que vende una, se descuenta del stock para todas.</li>
-  <li>La <b>caja diaria es una sola</b> para todo el comercio: la abre y la cierra quien corresponda, y el resumen
-      suma lo cobrado en todas las computadoras. En el historial figura qué usuario hizo cada venta.</li>
+  <li><b>Cada computadora tiene su propia caja diaria</b>, con su saldo inicial, sus entradas y salidas y su
+      arqueo al cierre. Cada cajero abre y cierra la suya, y cuenta solo el efectivo de su cajón.</li>
+  <li>Las ventas y los cobros cuentan en la caja de la computadora donde se hicieron. Si un pago pendiente se confirma
+      desde otra computadora, o una devolución se hace en otra, el dinero se anota en la caja de esa otra.</li>
+  <li>El administrador ve las jornadas de todas las cajas en <b>Caja diaria</b> y en el reporte
+      <b>«Cierres de caja por computadora»</b>. Un cajero ve solo las de su caja.</li>
+  <li>Si una caja quedó abierta en una computadora que ya se apagó, el administrador puede cerrarla desde cualquier
+      otra: en <b>Caja diaria</b>, seleccioná esa jornada y pulsá <b>Cerrar la caja seleccionada</b>.</li>
   <li>Cada computadora usa <b>su propia impresora</b>: se elige en Configuración → Comercio y ticket de esa computadora.</li>
   <li>Las <b>copias de seguridad</b> se hacen solo en el servidor, que es donde están los datos.</li>
   <li>La facturación de ARCA y los cobros de Mercado Pago se configuran una sola vez y sirven para todas.</li>

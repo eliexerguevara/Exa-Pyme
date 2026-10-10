@@ -42,11 +42,11 @@ class PaginaInicio(Pagina):
         ultima = caja or ctx.caja.ultima()
         r = ctx.caja.resumen(ultima["id"]) if ultima else None
         if caja:
-            self.estado.setText(f"Caja abierta desde el {fecha_legible(caja['abierta_en'])}.")
+            self.estado.setText(f"{ctx.puesto}: caja abierta desde el {fecha_legible(caja['abierta_en'])}.")
             self.boton_caja.setText("Ver caja diaria")
             self.titulo_resumen.setText("Caja del día")
         else:
-            self.estado.setText("La caja está cerrada. Abrila para empezar a vender.")
+            self.estado.setText(f"{ctx.puesto}: la caja está cerrada. Abrila para empezar a vender.")
             self.boton_caja.setText("Abrir caja")
             self.titulo_resumen.setText(
                 f"Última jornada de caja (cerrada el {fecha_legible(ultima['cerrada_en'])})" if ultima else "Caja del día"

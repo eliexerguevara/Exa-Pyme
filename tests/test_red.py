@@ -30,9 +30,12 @@ def servidor(ctx, producto):
     s.detener()
 
 
-def conectar(servidor, usuario="admin"):
+def conectar(servidor, usuario="admin", puesto="Caja 2"):
+    """Una computadora cliente, con su propia caja abierta."""
     remoto = ContextoRemoto(Cliente("127.0.0.1", servidor.puerto))
-    remoto.ingresar(usuario, CLAVE)
+    remoto.ingresar(usuario, CLAVE, puesto)
+    if remoto.caja.abierta() is None:
+        remoto.caja.abrir(0)
     return remoto
 
 
@@ -79,7 +82,7 @@ def test_ingreso_y_permisos_se_comprueban_en_el_servidor(servidor, ctx, producto
         assert not respuesta["ok"] and "no está disponible" in respuesta["mensaje"] or "no existe" in respuesta["mensaje"], (servicio, metodo)
     assert ctx.productos.obtener(producto)["stock_mil"] == 10000 and len(ctx.productos.buscar()) == 1
 
-    assert servidor.conectados()[0]["usuario"] == "Cajera Uno"
+    assert servidor.conectados()[0]["usuario"] == "Cajera Uno" and servidor.conectados()[0]["puesto"] == "Equipo 10.0.0.9"
     pedir(accion="salir", sesion=sesion["sesion"])
     assert servidor.conectados() == [] and llamar("productos", "buscar")["error"] == "SesionVencida"
 
@@ -159,7 +162,7 @@ def test_varias_cajas_venden_a_la_vez_sin_romper_el_stock(servidor, ctx, product
 
     def caja(n):
         try:
-            remoto = conectar(servidor, "caja1" if n % 2 else "admin")
+            remoto = conectar(servidor, "caja1" if n % 2 else "admin", f"Caja {n + 2}")
             for _ in range(5):
                 try:
                     resultados.append(vender(remoto, producto))
@@ -180,8 +183,11 @@ def test_varias_cajas_venden_a_la_vez_sin_romper_el_stock(servidor, ctx, product
     assert vendidas == ctx.db.valor("SELECT COUNT(*) FROM ventas") == len(set(resultados + local))
     assert vendidas == 10 or ctx.productos.obtener(producto)["stock_mil"] == 0
     assert ctx.db.valor("SELECT SUM(cantidad_mil) FROM movimientos_stock WHERE tipo = 'venta'") == -vendidas * 1000
-    r = ctx.caja.resumen(ctx.caja.abierta()["id"])
-    assert r["ventas_cantidad"] == vendidas and r["cobrado_total_cent"] == vendidas * 1728571
+    resumenes = [ctx.caja.resumen(c["id"]) for c in ctx.caja.listar()]
+    assert len(resumenes) == 5 and {r["puesto"] for r in resumenes} == {"Caja principal", "Caja 2", "Caja 3", "Caja 4", "Caja 5"}
+    assert sum(r["ventas_cantidad"] for r in resumenes) == vendidas                 # cada venta cae en la caja de su computadora
+    assert all(r["cobrado_total_cent"] == r["ventas_cantidad"] * 1728571 == r["efectivo_esperado_cent"] for r in resumenes)
+    assert next(r for r in resumenes if r["puesto"] == "Caja principal")["ventas_cantidad"] == len(local)
 
 
 def test_una_venta_no_se_duplica_aunque_se_envie_dos_veces(servidor, ctx, producto):

@@ -12,12 +12,15 @@ PERMISOS = {
     "cajero": {"vender", "caja", "productos_ver", "clientes", "historial"},
 }
 ROLES = {"admin": "Administrador", "cajero": "Cajero"}
+# Nombre de la caja de la computadora principal (y de las jornadas anteriores a tener varias cajas).
+PUESTO_PRINCIPAL = "Caja principal"
 
 
 class Contexto:
     def __init__(self, db: BaseDatos):
         self.db = db
         self.usuario: dict | None = None
+        self.puesto = PUESTO_PRINCIPAL  # nombre de esta computadora como caja
 
         from .caja import Caja
         from .clientes import Clientes

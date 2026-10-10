@@ -323,6 +323,14 @@ MIGRACIONES: list[str] = [
     CREATE UNIQUE INDEX ux_fiscal_vigente ON comprobantes_fiscales(venta_id, entorno, clase)
         WHERE parcial = 0 AND estado IN ('pendiente', 'autorizada');
     """,
+    # ---- versión 5: una caja diaria por computadora --------------------------
+    """
+    -- «puesto» es el nombre de la computadora (caja) a la que pertenece cada jornada.
+    ALTER TABLE cajas ADD COLUMN puesto TEXT NOT NULL DEFAULT 'Caja principal';
+    DROP INDEX ux_caja_abierta;
+    -- Cada computadora puede tener una sola caja abierta a la vez.
+    CREATE UNIQUE INDEX ux_caja_abierta ON cajas(puesto COLLATE NOCASE) WHERE estado = 'abierta';
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)

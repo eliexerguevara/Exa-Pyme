@@ -107,8 +107,8 @@ class Cliente:
     def hola(self) -> dict:
         return self.pedir({"accion": "hola"})
 
-    def ingresar(self, usuario: str, clave: str) -> dict:
-        datos = self.pedir({"accion": "ingresar", "usuario": usuario, "clave": clave, "version": __version__})
+    def ingresar(self, usuario: str, clave: str, puesto: str = "") -> dict:
+        datos = self.pedir({"accion": "ingresar", "usuario": usuario, "clave": clave, "version": __version__, "puesto": puesto})
         self.sesion = datos["sesion"]
         return datos
 
@@ -191,15 +191,18 @@ class ContextoRemoto:
         self.cliente = cliente
         self.usuario: dict | None = None
         self.permisos: set[str] = set()
+        self.puesto = ""
         self.config = ConfiguracionRemota(cliente)
         for nombre in ("usuarios", "productos", "inventario", "clientes", "compras", "caja", "ventas", "reportes", "sistema"):
             setattr(self, nombre, Remoto(cliente, nombre))
         self.arca = ArcaRemoto(cliente, "arca")
         self.mp = Remoto(cliente, "mp")
 
-    def ingresar(self, usuario: str, clave: str) -> dict:
-        datos = self.cliente.ingresar(usuario, clave)
-        self.usuario, self.permisos = datos["usuario"], set(datos["permisos"])
+    def ingresar(self, usuario: str, clave: str, puesto: str = "") -> dict:
+        """puesto: nombre de esta computadora como caja. Si no se indica, el guardado o el nombre del equipo."""
+        puesto = puesto or preferencias.leer()["puesto"] or preferencias.nombre_equipo()
+        datos = self.cliente.ingresar(usuario, clave, puesto)
+        self.usuario, self.permisos, self.puesto = datos["usuario"], set(datos["permisos"]), datos["puesto"]
         return self.usuario
 
     @property

@@ -17,8 +17,19 @@ class Caja:
         self.ctx = ctx
         self.db = ctx.db
 
+    @property
+    def puesto(self) -> str:
+        return self.ctx.puesto
+
     def abierta(self):
-        return self.db.uno("SELECT * FROM cajas WHERE estado = 'abierta'")
+        """La caja abierta de esta computadora (cada una tiene la suya)."""
+        return self.db.uno("SELECT * FROM cajas WHERE estado = 'abierta' AND puesto = ? COLLATE NOCASE", (self.puesto,))
+
+    def abiertas(self):
+        """Todas las cajas abiertas en este momento, de todas las computadoras."""
+        return self.db.consultar(
+            """SELECT c.*, COALESCE(u.nombre, '') AS abierta_por_nombre FROM cajas c
+               LEFT JOIN usuarios u ON u.id = c.abierta_por WHERE c.estado = 'abierta' ORDER BY c.puesto""")
 
     def requerir_abierta(self):
         caja = self.abierta()
@@ -38,14 +49,16 @@ class Caja:
         return fila
 
     def listar(self, limite: int = 400):
+        """Jornadas de caja. El administrador ve las de todas las computadoras; un cajero, las de la suya."""
+        filtro, params = ("", ()) if self.ctx.puede("cajas_todas") else ("WHERE c.puesto = ? COLLATE NOCASE", (self.puesto,))
         return self.db.consultar(
-            """SELECT c.*, COALESCE(ua.nombre, '') AS abierta_por_nombre
-               FROM cajas c LEFT JOIN usuarios ua ON ua.id = c.abierta_por ORDER BY c.id DESC LIMIT ?""",
-            (limite,),
+            f"""SELECT c.*, COALESCE(ua.nombre, '') AS abierta_por_nombre
+               FROM cajas c LEFT JOIN usuarios ua ON ua.id = c.abierta_por {filtro} ORDER BY c.id DESC LIMIT ?""",
+            (*params, limite),
         )
 
     def ultima(self):
-        return self.db.uno("SELECT * FROM cajas ORDER BY id DESC LIMIT 1")
+        return self.db.uno("SELECT * FROM cajas WHERE puesto = ? COLLATE NOCASE ORDER BY id DESC LIMIT 1", (self.puesto,))
 
     # ---- operaciones -----------------------------------------------------
     def abrir(self, saldo_inicial_cent: int) -> int:
@@ -54,12 +67,12 @@ class Caja:
             raise ErrorNegocio("El saldo inicial no puede ser negativo.")
         with self.db.transaccion():
             if self.abierta() is not None:
-                raise ErrorNegocio("Ya hay una caja abierta. Cerrala antes de abrir otra.")
+                raise ErrorNegocio("Esta computadora ya tiene la caja abierta. Cerrala antes de abrir otra.")
             cur = self.db.ejecutar(
-                "INSERT INTO cajas (abierta_en, abierta_por, saldo_inicial_cent) VALUES (?,?,?)",
-                (ahora(), self.ctx.usuario_id, saldo_inicial_cent),
+                "INSERT INTO cajas (abierta_en, abierta_por, saldo_inicial_cent, puesto) VALUES (?,?,?,?)",
+                (ahora(), self.ctx.usuario_id, saldo_inicial_cent, self.puesto),
             )
-            self.ctx.auditar("caja_abierta", "cajas", cur.lastrowid, f"Saldo inicial {fmt_dinero(saldo_inicial_cent)}")
+            self.ctx.auditar("caja_abierta", "cajas", cur.lastrowid, f"{self.puesto}: saldo inicial {fmt_dinero(saldo_inicial_cent)}")
         return cur.lastrowid
 
     def registrar_movimiento(self, tipo: str, monto_cent: int, motivo: str) -> int:
@@ -80,12 +93,21 @@ class Caja:
             self.ctx.auditar(f"caja_{tipo}", "cajas", caja["id"], f"{fmt_dinero(monto_cent)}: {motivo.strip()}")
         return cur.lastrowid
 
-    def cerrar(self, efectivo_contado_cent: int, notas: str = "") -> dict:
+    def cerrar(self, efectivo_contado_cent: int, notas: str = "", caja_id: int | None = None) -> dict:
+        """Cierra la caja de esta computadora. Con caja_id, un administrador puede cerrar la de otra
+        (por ejemplo, si quedó abierta en una computadora que se apagó)."""
         self.ctx.requiere("caja")
         if efectivo_contado_cent < 0:
             raise ErrorNegocio("El efectivo contado no puede ser negativo.")
         with self.db.transaccion():
-            caja = self.requerir_abierta()
+            if caja_id is None:
+                caja = self.requerir_abierta()
+            else:
+                caja = self.obtener(caja_id)
+                if caja["estado"] != "abierta":
+                    raise ErrorNegocio("Esa caja ya está cerrada.")
+                if caja["puesto"].lower() != self.puesto.lower():
+                    self.ctx.requiere("cajas_todas")
             esperado = self.resumen(caja["id"])["efectivo_esperado_cent"]
             diferencia = efectivo_contado_cent - esperado
             self.db.ejecutar(
@@ -95,7 +117,7 @@ class Caja:
             )
             self.ctx.auditar(
                 "caja_cerrada", "cajas", caja["id"],
-                f"Esperado {fmt_dinero(esperado)}, contado {fmt_dinero(efectivo_contado_cent)}, diferencia {fmt_dinero(diferencia)}",
+                f"{caja['puesto']}: esperado {fmt_dinero(esperado)}, contado {fmt_dinero(efectivo_contado_cent)}, diferencia {fmt_dinero(diferencia)}",
             )
         return self.resumen(caja["id"])
 
@@ -154,6 +176,7 @@ class Caja:
         cerrada = caja["estado"] == "cerrada"
         return {
             "caja_id": caja_id,
+            "puesto": caja["puesto"],
             "estado": caja["estado"],
             "abierta_en": caja["abierta_en"],
             "cerrada_en": caja["cerrada_en"],
