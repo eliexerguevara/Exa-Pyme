@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import date
 
 from ...core.dinero import D, fmt_dinero
@@ -41,6 +42,26 @@ class ServicioArca:
     @property
     def cuit(self) -> str:
         return solo_digitos(self.ctx.config.obtener("fiscal_cuit"))
+
+    def entorno_actual(self) -> str:
+        return self.entorno
+
+    # ---- certificado (vive en la computadora que tiene los datos) ----------
+    def estado_certificado(self) -> dict:
+        return credenciales.estado(self.entorno)
+
+    def generar_pedido(self) -> bytes:
+        self.ctx.requiere("facturacion")
+        cfg = self.ctx.config
+        return credenciales.generar_pedido(self.entorno, cfg.obtener("fiscal_cuit"), cfg.obtener("fiscal_razon_social"))
+
+    def importar_certificado(self, contenido: bytes) -> dict:
+        self.ctx.requiere("facturacion")
+        return credenciales.importar_certificado(self.entorno, contenido, self.ctx.config.obtener("fiscal_cuit"))
+
+    def importar_clave(self, contenido: bytes) -> None:
+        self.ctx.requiere("facturacion")
+        credenciales.importar_clave(self.entorno, contenido)
 
     def datos_completos(self) -> list[str]:
         """Datos fiscales que faltan para poder facturar."""
@@ -252,9 +273,13 @@ class ServicioArca:
         if v["estado"] != "completada":
             raise ErrorNegocio("No se puede facturar una venta anulada.")
         datos = self.armar(venta_id)
-        with self.db.transaccion():
-            comprobante_id = self._insertar(datos, "factura")
-            self._marcar_venta(venta_id, "pendiente")
+        try:
+            with self.db.transaccion():
+                comprobante_id = self._insertar(datos, "factura")
+                self._marcar_venta(venta_id, "pendiente")
+        except sqlite3.IntegrityError:
+            # Otra caja empezó a facturar esta misma venta en el mismo instante.
+            raise ErrorNegocio("Esta venta ya se está facturando desde otra computadora. Actualizá la lista.") from None
         return self._resolver(comprobante_id)
 
     def reintentar(self, comprobante_id: int):

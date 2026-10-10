@@ -103,7 +103,8 @@ class GestorActualizaciones(QObject):
             "Actualizar ahora", "Más tarde", "Actualización disponible",
         ):
             return
-        self.ctx.copias.crear("manual")
+        if not getattr(self.ctx, "remoto", False):  # un cliente no tiene datos propios que resguardar
+            self.ctx.copias.crear("manual")
         self._dialogo = QProgressDialog("Descargando la actualización…", "", 0, 100, self.ventana)
         self._dialogo.setWindowTitle("Actualizando Exa Pyme")
         self._dialogo.setCancelButton(None)

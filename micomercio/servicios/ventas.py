@@ -466,6 +466,9 @@ class Ventas:
     def items(self, venta_id: int):
         return self.db.consultar("SELECT * FROM venta_items WHERE venta_id = ? ORDER BY id", (venta_id,))
 
+    def pago(self, pago_id: int):
+        return self._pago(pago_id)
+
     def pagos(self, venta_id: int):
         return self.db.consultar("SELECT * FROM pagos WHERE venta_id = ? ORDER BY id", (venta_id,))
 

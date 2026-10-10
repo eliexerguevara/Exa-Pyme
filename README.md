@@ -137,8 +137,27 @@ Las pruebas (`tests/test_mercadopago.py`) usan una API simulada. Contra la API r
 formato del pedido y el rechazo de una credencial inventada: el primer cobro real hay que probarlo con la cuenta del
 comercio (Mercado Pago ofrece credenciales y usuarios de prueba).
 
+## Varias computadoras: servidor y clientes
+
+Está en `micomercio/red/`. Al instalar, el programa pregunta si la computadora es el **servidor** (guarda los datos) o
+un **cliente** (se conecta al servidor con su IP y su puerto; hay una casilla para recordarlos).
+
+- El servidor es el mismo programa, que además atiende a los clientes en un puerto (8765 por defecto). Se enciende y
+  se apaga desde Configuración → Red.
+- Los clientes no tienen base de datos: cada operación de la interfaz se pide al servidor (`ContextoRemoto`).
+- La comunicación es HTTPS con un certificado propio del servidor; el cliente recuerda su huella y avisa si cambia.
+- Los permisos se comprueban en el servidor, con el usuario de cada sesión. Solo se pueden pedir las operaciones
+  públicas de los servicios; las internas están bloqueadas (`SERVICIOS` y `BLOQUEADOS` en `red/servidor.py`).
+- Cliente y servidor deben tener la misma versión.
+- La base admite varios hilos: un candado hace que cada transacción se ejecute completa antes de la siguiente.
+- La caja diaria es una sola para todas las computadoras. La impresora se configura en cada una.
+
+Las pruebas (`tests/test_red.py`) levantan un servidor real en la misma máquina y conectan clientes por la red local
+(127.0.0.1), incluidas cuatro cajas vendiendo a la vez. No se probó entre dos computadoras físicas distintas.
+
 ## Lo que todavía no hace
 
 - Mercado Pago: no hace devoluciones ni recibe notificaciones (webhooks); no cobra con Point ni con link de pago.
 - Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
+- Red: una caja diaria por computadora (hoy es una sola compartida); trabajar si el servidor está apagado.
 - Recuperación de la contraseña del administrador si se la olvida.

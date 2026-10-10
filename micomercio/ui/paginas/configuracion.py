@@ -11,6 +11,7 @@ from ...servicios.contexto import ROLES
 from ..comunes import CampoDecimal, Dialogo, Pagina, Tabla, boton, cf, etiqueta, fila, informar
 from ..impresion import impresoras
 from .config_mp import PanelMercadoPago
+from .config_red import PanelRed
 
 ACCIONES = {
     "cambio_precio": "Cambio de precio", "cambio_masivo_precios": "Cambio masivo de precios",
@@ -126,6 +127,9 @@ class PaginaConfiguracion(Pagina):
         self.mercado_pago = PanelMercadoPago(self.ctx)
         pestanas.addTab(self.mercado_pago, "Mercado Pago")
 
+        self.red = PanelRed(self.ctx, self.ventana)
+        pestanas.addTab(self.red, "Red")
+
         # --- usuarios ---
         usuarios = QWidget()
         vu = QVBoxLayout(usuarios)
@@ -166,6 +170,7 @@ class PaginaConfiguracion(Pagina):
         self.impuesto.setCurrentText(fmt_pct(cfg.decimal("impuesto_predeterminado")))
         self.metodo.setCurrentIndex(max(0, self.metodo.findData(cfg.obtener("metodo_precio_predeterminado"))))
         self.mercado_pago.refrescar()
+        self.red.refrescar()
         self.cargar_usuarios()
         self.tabla_registro.cargar([[cf(a["fecha"]), a["usuario"], ACCIONES.get(a["accion"], a["accion"]), a["detalle"] or ""]
                                     for a in self.ctx.auditoria()])

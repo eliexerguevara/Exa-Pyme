@@ -364,5 +364,7 @@ class ServicioMercadoPago:
         return resultado
 
 
-def crear_servicio(ctx) -> ServicioMercadoPago:
+def crear_servicio(ctx):
+    if getattr(ctx, "remoto", False):
+        return ctx.mp  # en un cliente, los cobros se gestionan en el servidor
     return ServicioMercadoPago(ctx)

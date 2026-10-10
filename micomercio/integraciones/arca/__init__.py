@@ -79,6 +79,8 @@ class EstadoFiscal:
 
 
 def crear_servicio(ctx):
+    if getattr(ctx, "remoto", False):
+        return ctx.arca  # en un cliente, la facturación corre en el servidor
     from .servicio import ServicioArca
 
     return ServicioArca(ctx)

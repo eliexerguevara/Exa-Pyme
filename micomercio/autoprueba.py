@@ -62,6 +62,22 @@ def ejecutar(ruta_resultado: str | None = None) -> int:
         assert segno.make("prueba").png_data_uri().startswith("data:image/png"), "no se puede generar el QR"
         transporte._contexto_compatible()
 
+        # Trabajo en red: un servidor y un cliente dentro de esta misma computadora.
+        from .red.cliente import Cliente, ContextoRemoto
+        from .red.servidor import Servidor
+
+        clave_red = uuid.uuid4().hex
+        ctx.usuarios.crear("red", "Prueba de red", clave_red, "cajero")
+        servidor = Servidor(db, 0)
+        servidor.iniciar("127.0.0.1")
+        try:
+            remoto = ContextoRemoto(Cliente("127.0.0.1", servidor.puerto))
+            remoto.ingresar("red", clave_red)
+            assert remoto.productos.por_codigo("7790000000017")["precio_final_cent"] == 1728571, "falla el trabajo en red"
+            remoto.cliente.salir()
+        finally:
+            servidor.detener()
+
         ventana = VentanaPrincipal(ctx)  # no se muestra
         ventana.reloj_copias.stop()
         assert len(ventana.paginas) == len(MENU), "faltan pantallas del menú"

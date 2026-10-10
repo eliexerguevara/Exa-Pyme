@@ -6,7 +6,8 @@ from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
-from .. import NOMBRE_APP, __version__
+from .. import NOMBRE_APP, __version__, preferencias
+from ..core.errores import ErrorNegocio
 from ..registro import log
 from ..servicios.contexto import ROLES
 from . import tema
@@ -45,9 +46,11 @@ MENU = [
 
 
 class VentanaPrincipal(QMainWindow):
-    def __init__(self, ctx):
+    def __init__(self, ctx, servidor=None):
         super().__init__()
         self.ctx = ctx
+        self.servidor = servidor                       # servidor de red de esta computadora, si lo hay
+        self.remoto = getattr(ctx, "remoto", False)    # esta computadora es un cliente
         self.copia_al_cerrar = True
         self.setWindowIcon(tema.icono_aplicacion())
         self.setMinimumSize(1120, 700)
@@ -77,6 +80,8 @@ class VentanaPrincipal(QMainWindow):
         for clave, texto, clase, permiso in MENU:
             if permiso and not ctx.puede(permiso):
                 continue
+            if clave == "copias" and self.remoto:
+                continue  # las copias se hacen en la computadora que tiene los datos
             b = QPushButton("  " + texto)
             b.setCheckable(True)
             b.setIcon(tema.icono_menu(clave))
@@ -96,6 +101,8 @@ class VentanaPrincipal(QMainWindow):
         self.boton_update.setCursor(Qt.PointingHandCursor)
         self.boton_update.hide()
         vl.addWidget(self.boton_update)
+        self.estado_red = etiqueta("", "submarca", True)
+        vl.addWidget(self.estado_red)
         self.estado_caja = etiqueta("", "chip")
         self.estado_caja.setAlignment(Qt.AlignCenter)
         contenedor = QHBoxLayout()
@@ -120,10 +127,15 @@ class VentanaPrincipal(QMainWindow):
         self.reloj_inicio = QTimer(self)
         self.reloj_inicio.setSingleShot(True)
         self.reloj_inicio.timeout.connect(self.copia_automatica)
-        self.reloj_inicio.start(1500)
         self.reloj_copias = QTimer(self)
         self.reloj_copias.timeout.connect(self.copia_automatica)
-        self.reloj_copias.start(60 * 60 * 1000)
+        if not self.remoto:
+            self.reloj_inicio.start(1500)
+            self.reloj_copias.start(60 * 60 * 1000)
+        # Con varias computadoras, el estado de la caja puede cambiar desde otra: se refresca cada tanto.
+        self.reloj_estado = QTimer(self)
+        self.reloj_estado.timeout.connect(self.refrescar_estado)
+        self.reloj_estado.start(20000)
 
         # Actualizaciones: se consulta al abrir y cada seis horas. Sin Internet no pasa nada.
         self.reloj_actualizaciones = QTimer(self)
@@ -148,10 +160,42 @@ class VentanaPrincipal(QMainWindow):
         nombre = self.ctx.config.obtener("comercio_nombre")
         self.comercio.setText(nombre)
         self.setWindowTitle(f"{NOMBRE_APP} — {nombre}")
+        if self.remoto:
+            self.estado_red.setText(f"Conectado a {self.ctx.cliente.host}")
+        elif self.servidor is not None and self.servidor.activo:
+            from ..red.servidor import direcciones_locales
+
+            self.estado_red.setText(f"Servidor: {direcciones_locales()[0]} : {self.servidor.puerto}")
+        else:
+            self.estado_red.setText("")
+        self.estado_red.setVisible(bool(self.estado_red.text()))
         abierta = self.ctx.caja.abierta() is not None
         self.estado_caja.setText("Caja abierta" if abierta else "Caja cerrada")
         self.estado_caja.setStyleSheet(
             "background: #DCFCE7; color: #166534;" if abierta else "background: #FEE2E2; color: #991B1B;")
+
+    def refrescar_estado(self) -> None:
+        if self.remoto or (self.servidor is not None and self.servidor.activo):
+            try:
+                self.actualizar_estado()
+            except ErrorNegocio:
+                self.estado_red.setText("Sin conexión con el servidor")
+
+    def aplicar_red(self) -> None:
+        """Enciende, apaga o reinicia el servidor de red según las preferencias de esta computadora."""
+        if self.remoto:
+            return
+        from ..red.servidor import Servidor
+
+        prefs = preferencias.leer()
+        if self.servidor is not None and self.servidor.activo:
+            self.servidor.detener()
+        self.servidor = None
+        if prefs["red_activa"]:
+            servidor = Servidor(self.ctx.db, int(prefs["red_puerto"]))
+            servidor.iniciar()
+            self.servidor = servidor
+        self.actualizar_estado()
 
     def mostrar_actualizacion(self, actualizacion) -> None:
         visible = actualizacion is not None and self.ctx.puede("configuracion")
@@ -171,7 +215,18 @@ class VentanaPrincipal(QMainWindow):
         self.close()
 
     def closeEvent(self, evento) -> None:
-        for reloj in (self.reloj_copias, self.reloj_actualizaciones, self.reloj_inicio, self.reloj_primera_consulta):
+        if self.servidor is not None and self.servidor.activo and self.servidor.conectados():
+            from .comunes import confirmar
+
+            if not confirmar(self, "Hay otras computadoras conectadas a esta. Si cerrás Exa Pyme acá, van a dejar de "
+                                   "funcionar hasta que lo vuelvas a abrir.\n\n¿Cerrar igual?", "Cerrar"):
+                evento.ignore()
+                return
+        for reloj in (self.reloj_copias, self.reloj_actualizaciones, self.reloj_inicio, self.reloj_primera_consulta, self.reloj_estado):
             reloj.stop()
         self.actualizaciones.detener()
+        if self.remoto:
+            self.ctx.cliente.salir()
+        elif self.servidor is not None and self.servidor.activo:
+            self.servidor.detener()
         evento.accept()

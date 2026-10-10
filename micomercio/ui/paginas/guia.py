@@ -460,7 +460,49 @@ productos vuelven al stock y la devolución del dinero se registra en la caja.</
             "que ARCA no autorizó.") + _nota(
     "El certificado vence (la pantalla muestra la fecha). Antes de que venza, generá un pedido nuevo y cargá el "
     "certificado nuevo: el anterior sigue funcionando mientras tanto.", "ojo")),
-    ("17. Actualizar el programa", """
+    ("17. Varias computadoras (servidor y clientes)", """
+<h2>Varias computadoras: servidor y clientes</h2>
+<p>Si el comercio tiene más de una caja, todas pueden trabajar con los mismos productos, precios, stock y ventas.
+Una computadora es el <b>servidor</b> (la principal: guarda los datos) y las demás son <b>clientes</b>.</p>
+<h3>1. En la computadora principal (servidor)</h3>
+<ol>
+  <li>Al instalar Exa Pyme, elegí <b>Servidor</b> y tildá «Otras computadoras se van a conectar a esta».
+      Si el programa ya estaba instalado, entrá a <b>Configuración</b> → pestaña <b>Red</b>, tildá
+      «Permitir que otras computadoras se conecten a esta» y pulsá <b>Guardar</b>.</li>
+  <li>Si Windows pregunta si permitís que Exa Pyme se comunique por la red, elegí <b>Permitir</b> en redes privadas.</li>
+  <li>En esa misma pestaña figuran la <b>IP</b> y el <b>puerto</b> que hay que escribir en las otras computadoras.</li>
+  <li>Creá un usuario para cada cajero en <b>Configuración</b> → <b>Usuarios</b>.</li>
+</ol>
+<h3>2. En cada una de las otras computadoras (clientes)</h3>
+<ol>
+  <li>Instalá Exa Pyme y elegí <b>Cliente</b>.</li>
+  <li>Escribí la <b>IP</b> y el <b>puerto</b> del servidor.</li>
+  <li>Tildá <b>«Recordar la IP y el puerto en esta computadora»</b> para no tener que escribirlos cada vez.</li>
+  <li>Escribí tu <b>usuario</b> y tu <b>contraseña</b> y pulsá <b>Ingresar</b>. La contraseña nunca queda guardada.</li>
+</ol>
+<h3>Cómo se trabaja</h3>
+<ul>
+  <li>Todas las computadoras ven los mismos datos al instante: lo que vende una, se descuenta del stock para todas.</li>
+  <li>La <b>caja diaria es una sola</b> para todo el comercio: la abre y la cierra quien corresponda, y el resumen
+      suma lo cobrado en todas las computadoras. En el historial figura qué usuario hizo cada venta.</li>
+  <li>Cada computadora usa <b>su propia impresora</b>: se elige en Configuración → Comercio y ticket de esa computadora.</li>
+  <li>Las <b>copias de seguridad</b> se hacen solo en el servidor, que es donde están los datos.</li>
+  <li>La facturación de ARCA y los cobros de Mercado Pago se configuran una sola vez y sirven para todas.</li>
+</ul>
+<h3>Si un cliente no se puede conectar</h3>
+<ul>
+  <li>La computadora principal tiene que estar <b>encendida y con Exa Pyme abierto</b>. Si se cierra, las otras dejan de funcionar.</li>
+  <li>Las dos tienen que estar en la <b>misma red</b> (mismo router o Wi-Fi).</li>
+  <li>Revisá la IP y el puerto en Configuración → Red del servidor. Si la IP cambió, pedile a quien maneje la red que
+      le deje una IP fija a esa computadora.</li>
+  <li>Las dos tienen que tener la <b>misma versión</b>: actualizá primero el servidor y después cada cliente, con el
+      botón «Actualizar programa» de la pantalla de ingreso.</li>
+</ul>
+""" + _nota("La comunicación entre las computadoras va cifrada, y los permisos de cada usuario se comprueban en el "
+            "servidor: un cajero no puede hacer desde otra computadora lo que no puede hacer en la principal.") + _nota(
+    "Está pensado para computadoras dentro del mismo local. No abras el puerto a Internet desde el router.", "ojo")),
+
+    ("18. Actualizar el programa", """
 <h2>Actualizar el programa</h2>
 <p>Cuando se publica una versión nueva de Exa Pyme, aparece el botón azul <b>Update</b> en la parte de abajo del
 menú, con el número de la versión. El programa lo consulta solo al abrirse (hace falta Internet) y solo lo ve
@@ -477,7 +519,7 @@ el administrador.</p>
 """ + _nota("Actualizar no cambia tus productos, ventas ni configuración: los datos están guardados aparte del "
             "programa. Si la descarga falla o llega dañada, se descarta y el programa queda como estaba.")),
 
-    ("18. Problemas frecuentes", """
+    ("19. Problemas frecuentes", """
 <h2>Problemas frecuentes</h2>
 <h3>Los botones de cobro están apagados</h3>
 <p>La caja está cerrada o la venta no tiene productos. Abrí la caja desde <b>Caja diaria</b>.</p>

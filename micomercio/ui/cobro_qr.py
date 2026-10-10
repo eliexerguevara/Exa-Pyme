@@ -16,27 +16,28 @@ from . import tema
 from .comunes import boton, etiqueta, fila
 
 INTERVALO_MS = 3000
+MOTIVOS = {"cancelado": "El código QR venció o el cobro fue cancelado", "rechazado": "Mercado Pago rechazó el pago"}
 
 
 class _Consulta(QThread):
-    """Pregunta a Mercado Pago en segundo plano. Solo usa la red; la base se toca en el hilo principal."""
+    """Pregunta en segundo plano si el cliente ya pagó, para no congelar la ventana."""
 
-    terminada = Signal(object, str)
+    terminada = Signal(str, str)  # (estado del pago, error)
 
-    def __init__(self, servicio, datos: dict):
+    def __init__(self, servicio, pago_id: int):
         super().__init__()
-        self.servicio, self.datos = servicio, datos
+        self.servicio, self.pago_id = servicio, pago_id
 
     def run(self) -> None:
         try:
-            self.terminada.emit(self.servicio.consultar_orden(self.datos), "")
+            self.terminada.emit(self.servicio.verificar(self.pago_id), "")
         except mercadopago.ErrorConexionMP:
-            self.terminada.emit(None, "conexion")
+            self.terminada.emit("", "conexion")
         except ErrorNegocio as e:
-            self.terminada.emit(None, str(e))
+            self.terminada.emit("", "conexion" if type(e).__name__ == "ErrorServidor" else str(e))
         except Exception:
             log.exception("Error al consultar el cobro en Mercado Pago")
-            self.terminada.emit(None, "conexion")
+            self.terminada.emit("", "conexion")
 
 
 class DialogoCobroQR(QDialog):
@@ -46,7 +47,7 @@ class DialogoCobroQR(QDialog):
         super().__init__(padre)
         self.ctx, self.venta_id, self.pago_id = ctx, venta_id, pago_id
         self.servicio = servicio or mercadopago.crear_servicio(ctx)
-        self.resultado, self.datos, self.hilo = "pendiente", None, None
+        self.resultado, self.creado, self.hilo = "pendiente", False, None
         self.setWindowTitle("Cobrar con Mercado Pago")
         self.setMinimumWidth(430)
         v = QVBoxLayout(self)
@@ -78,10 +79,10 @@ class DialogoCobroQR(QDialog):
     # ---- creación del cobro ---------------------------------------------
     def iniciar(self) -> None:
         self.b_otro.hide()
+        self.creado = False
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             cobro = self.servicio.crear_cobro(self.pago_id)
-            self.datos = self.servicio.datos_consulta(self.pago_id)
         except ErrorNegocio as e:
             self.mostrar_estado(f"No se pudo generar el cobro.\n{e}", tema.ROJO)
             self.imagen.clear()
@@ -91,6 +92,7 @@ class DialogoCobroQR(QDialog):
             return
         finally:
             QApplication.restoreOverrideCursor()
+        self.creado = True
         self.total.setText(fmt_dinero(cobro["monto_cent"]))
         if cobro["qr"]:
             memoria = io.BytesIO()
@@ -114,14 +116,15 @@ class DialogoCobroQR(QDialog):
 
     # ---- seguimiento -----------------------------------------------------
     def consultar(self) -> None:
-        if self.datos is None or (self.hilo is not None and self.hilo.isRunning()):
+        if not self.creado or (self.hilo is not None and self.hilo.isRunning()):
             return
-        self.hilo = _Consulta(self.servicio, self.datos)
+        self.hilo = _Consulta(self.servicio, self.pago_id)
         self.hilo.terminada.connect(self.recibir)
         self.hilo.start()
 
-    @Slot(object, str)
-    def recibir(self, cobro, error: str) -> None:
+    @Slot(str, str)
+    def recibir(self, estado: str, error: str) -> None:
+        """estado: cómo quedó el pago después de preguntarle a Mercado Pago (pendiente, confirmado, cancelado, rechazado)."""
         if not self.reloj.isActive():
             return  # llegó tarde: el diálogo ya resolvió otra cosa
         if error == "conexion":
@@ -131,13 +134,13 @@ class DialogoCobroQR(QDialog):
             self.reloj.stop()
             self.mostrar_estado(error, tema.ROJO)
             return
-        if cobro.estado == "pendiente":
+        if estado == "pendiente":
             self.mostrar_estado("Esperando el pago…", tema.TEXTO_SUAVE)
             return
         self.reloj.stop()
-        self.resolver(self.servicio.aplicar(self.pago_id, cobro), cobro.detalle)
+        self.resolver(estado)
 
-    def resolver(self, estado: str, detalle: str = "") -> None:
+    def resolver(self, estado: str) -> None:
         if estado == "confirmado":
             self.resultado = "confirmado"
             self.imagen.clear()
@@ -151,17 +154,16 @@ class DialogoCobroQR(QDialog):
         else:
             # Venció, se canceló o fue rechazado: ese cobro ya no sirve.
             self.resultado = "otra_forma"
-            self.datos = None
+            self.creado = False
             self.imagen.clear()
             self.instruccion.setText("")
-            self.mostrar_estado((detalle or "El cobro no se completó") + ".", tema.ROJO)
+            self.mostrar_estado(MOTIVOS.get(estado, "El cobro no se completó") + ".", tema.ROJO)
             self.b_otro.setText("Generar otro QR")
             self.b_otro.show()
             self.b_pendiente.hide()
 
     def nuevo_qr(self) -> None:
-        pago = self.ctx.db.uno("SELECT estado FROM pagos WHERE id = ?", (self.pago_id,))
-        if pago["estado"] != "pendiente":
+        if self.ctx.ventas.pago(self.pago_id)["estado"] != "pendiente":
             # El cobro anterior quedó cancelado: se registra uno nuevo por lo que falta cobrar.
             self.pago_id = self.ctx.ventas.agregar_pago(
                 self.venta_id, {"medio": "mercadopago", "monto_cent": self.ctx.ventas.saldo(self.venta_id), "estado": "pendiente"})
@@ -171,7 +173,7 @@ class DialogoCobroQR(QDialog):
 
     def otra_forma(self) -> None:
         self.reloj.stop()
-        if self.datos is not None:
+        if self.creado:
             QApplication.setOverrideCursor(Qt.WaitCursor)
             try:
                 estado = self.servicio.cancelar(self.pago_id)
@@ -184,10 +186,8 @@ class DialogoCobroQR(QDialog):
             if estado == "confirmado":  # el cliente pagó justo antes
                 self.resolver("confirmado")
                 return
-        else:
-            pago = self.ctx.db.uno("SELECT estado FROM pagos WHERE id = ?", (self.pago_id,))
-            if pago["estado"] == "pendiente":
-                self.ctx.ventas.descartar_pago(self.pago_id, "cancelado")  # nunca llegó a crearse en Mercado Pago
+        elif self.ctx.ventas.pago(self.pago_id)["estado"] == "pendiente":
+            self.ctx.ventas.descartar_pago(self.pago_id, "cancelado")  # nunca llegó a crearse en Mercado Pago
         self.resultado = "otra_forma"
         self.accept()
 

@@ -317,6 +317,12 @@ MIGRACIONES: list[str] = [
     ALTER TABLE comprobantes_fiscales ADD COLUMN devolucion_json TEXT;
     ALTER TABLE comprobantes_fiscales ADD COLUMN devolucion_id INTEGER REFERENCES devoluciones(id);
     """,
+    # ---- versión 4: trabajo en red -----------------------------------------
+    """
+    -- Con varias cajas a la vez, dos personas no pueden facturar (ni anular con nota de crédito) la misma venta.
+    CREATE UNIQUE INDEX ux_fiscal_vigente ON comprobantes_fiscales(venta_id, entorno, clase)
+        WHERE parcial = 0 AND estado IN ('pendiente', 'autorizada');
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)

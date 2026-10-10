@@ -247,13 +247,14 @@ def test_ventana_de_cobro_con_qr(app, cobro, ctx):
 
     servicio, simulado, venta, pago = cobro
     d = DialogoCobroQR(None, ctx, venta, pago, servicio)
-    assert d.total.text() == "$ 17.285,71" and not d.imagen.pixmap().isNull() and d.reloj.isActive()
-    d.recibir(servicio.consultar_orden(d.datos), "")
+    orden = ctx.ventas.pago(pago)["id_externo"]
+    assert d.total.text() == "$ 17.285,71" and not d.imagen.pixmap().isNull() and d.reloj.isActive() and orden
+    d.recibir(servicio.verificar(pago), "")
     assert "Esperando" in d.estado.text() and d.reloj.isActive()
-    d.recibir(None, "conexion")
+    d.recibir("", "conexion")
     assert "Sin conexión" in d.estado.text() and ctx.ventas.pagos(venta)[0]["estado"] == "pendiente"
 
-    simulado.pagar(d.datos["orden"])
+    simulado.pagar(orden)
     d.consultar()                                   # consulta real en segundo plano
     d.hilo.wait(5000)
     app.processEvents()
@@ -267,8 +268,8 @@ def test_qr_vencido_se_puede_generar_otro_o_cobrar_de_otra_forma(app, cobro, ctx
 
     servicio, simulado, venta, pago = cobro
     d = DialogoCobroQR(None, ctx, venta, pago, servicio)
-    simulado.ordenes[d.datos["orden"]]["status"] = "expired"
-    d.recibir(servicio.consultar_orden(d.datos), "")
+    simulado.ordenes[ctx.ventas.pago(pago)["id_externo"]]["status"] = "expired"
+    d.recibir(servicio.verificar(pago), "")
     assert d.resultado == "otra_forma" and not d.b_otro.isHidden() and "venció" in d.estado.text()
     assert ctx.ventas.pagos(venta)[0]["estado"] == "cancelado"
 

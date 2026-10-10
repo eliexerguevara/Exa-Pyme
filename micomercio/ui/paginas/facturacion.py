@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 
 from ...core.errores import ErrorNegocio
 from ...integraciones import arca
-from ...integraciones.arca import credenciales, impreso
+from ...integraciones.arca import impreso
 from ...integraciones.arca.transporte import ErrorConexion
 from .. import tema
 from ..comunes import (
@@ -271,8 +271,8 @@ class PaginaFacturacion(Pagina):
 
     def generar_pedido(self) -> None:
         self.ctx.requiere("facturacion")
-        cfg, entorno = self.ctx.config, self.servicio.entorno
-        pedido = credenciales.generar_pedido(entorno, cfg.obtener("fiscal_cuit"), cfg.obtener("fiscal_razon_social"))
+        entorno = self.servicio.entorno
+        pedido = self.servicio.generar_pedido()
         ruta, _ = QFileDialog.getSaveFileName(self, "Guardar el pedido de certificado", f"micomercio_{entorno}.csr",
                                               "Pedido de certificado (*.csr)")
         if ruta:
@@ -282,7 +282,7 @@ class PaginaFacturacion(Pagina):
 
     def _importar(self, contenido: bytes) -> None:
         self.ctx.requiere("facturacion")
-        info = credenciales.importar_certificado(self.servicio.entorno, contenido, self.ctx.config.obtener("fiscal_cuit"))
+        info = self.servicio.importar_certificado(contenido)
         self.refrescar()
         informar(self, f"Certificado cargado. Es válido hasta el {info['certificado']['hasta']}.\n\nAhora pulsá «Probar conexión».")
 
@@ -307,7 +307,7 @@ class PaginaFacturacion(Pagina):
         self.ctx.requiere("facturacion")
         ruta, _ = QFileDialog.getOpenFileName(self, "Elegir la clave privada", "", "Clave privada (*.key *.pem);;Todos (*.*)")
         if ruta:
-            credenciales.importar_clave(self.servicio.entorno, Path(ruta).read_bytes())
+            self.servicio.importar_clave(Path(ruta).read_bytes())
             self.refrescar()
             informar(self, "La clave privada se guardó cifrada. Ahora importá el certificado que le corresponde.")
 
@@ -342,7 +342,7 @@ class PaginaFacturacion(Pagina):
         self.estado.style().polish(self.estado)
 
         entorno = self.servicio.entorno
-        info = credenciales.estado(entorno)
+        info = self.servicio.estado_certificado()
         nombre = "homologación" if entorno == "homologacion" else "producción"
         if info["certificado"] and info["clave"]:
             c = info["certificado"]

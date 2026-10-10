@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QComboBox, QFileDialog
 
 from ...servicios import csv_io
-from ...servicios.reportes import formatear
+from ...servicios.reportes import Reportes, formatear
 from ..comunes import Pagina, SelectorPeriodo, Tabla, boton, etiqueta, fila, informar
 
 NUMERICOS = ("dinero", "cantidad", "pct", "entero")
@@ -15,7 +15,7 @@ class PaginaReportes(Pagina):
     def armar(self) -> None:
         self.reporte = None
         self.tipo = QComboBox()
-        for clave, nombre in self.ctx.reportes.LISTA:
+        for clave, nombre in Reportes.LISTA:
             self.tipo.addItem(nombre, clave)
         self.tipo.currentIndexChanged.connect(lambda _: self.refrescar())
         self.periodo = SelectorPeriodo("Hoy")

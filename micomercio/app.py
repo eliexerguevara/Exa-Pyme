@@ -7,14 +7,14 @@ from PySide6.QtCore import QLocale, QLockFile
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from . import NOMBRE_APP, __version__
+from . import NOMBRE_APP, __version__, preferencias
 from .core.errores import ErrorNegocio
 from .db import BaseDatos
 from .registro import configurar_registro, log
 from .rutas import carpeta_datos, carpeta_registros, ruta_base_datos
 from .servicios import Contexto, actualizador
 from .ui import tema
-from .ui.acceso import DialogoIngreso, DialogoPrimerUso
+from .ui.acceso import DialogoConexion, DialogoIngreso, DialogoModo, DialogoPrimerUso
 from .ui.ventana import VentanaPrincipal
 
 
@@ -48,7 +48,7 @@ def main() -> int:
     sys.excepthook = _gancho_errores
     log.info("Inicio de %s %s", NOMBRE_APP, __version__)
 
-    # Una sola copia del programa a la vez sobre la misma base de datos.
+    # Una sola copia del programa a la vez en esta computadora.
     candado = QLockFile(str(carpeta_datos() / "micomercio.lock"))
     candado.setStaleLockTime(0)
     # Tras una actualización, la versión anterior puede tardar unos segundos en cerrarse.
@@ -56,13 +56,73 @@ def main() -> int:
     if not candado.tryLock(espera):
         QMessageBox.information(None, NOMBRE_APP, "Exa Pyme ya está abierto en esta computadora.")
         return 0
-
     actualizador.limpiar_restos()
+
+    db = servidor = None
     try:
-        db = BaseDatos(ruta_base_datos())
+        modo = _elegir_modo()
+        while True:
+            if not modo:
+                return 0
+            if modo == "cliente":
+                dialogo = DialogoConexion()
+                aceptado = dialogo.exec()
+                if dialogo.cambiar_modo:
+                    modo = _preguntar_modo()
+                    continue
+                if not aceptado:
+                    return 0
+                ctx = dialogo.ctx
+            else:
+                db = _abrir_base()
+                if db is None:
+                    return 1
+                servidor = _iniciar_servidor(db)
+                ctx = Contexto(db)
+                dialogo = DialogoIngreso(ctx) if ctx.usuarios.hay_usuarios() else DialogoPrimerUso(ctx)
+                if not dialogo.exec():
+                    return 0
+            break
+        ventana = VentanaPrincipal(ctx, servidor)
+        ventana.showMaximized()
+        codigo = app.exec()
+        servidor = ventana.servidor
+        del ventana  # las ventanas se destruyen antes que la aplicación
+        return codigo
+    finally:
+        if servidor is not None and servidor.activo:
+            servidor.detener()
+        if db is not None:
+            db.cerrar()
+        candado.unlock()
+        log.info("Cierre de %s", NOMBRE_APP)
+
+
+def _preguntar_modo() -> str:
+    dialogo = DialogoModo()
+    if not dialogo.exec():
+        return ""
+    preferencias.guardar(**dialogo.valores())
+    return dialogo.modo
+
+
+def _elegir_modo() -> str:
+    """Servidor (esta computadora guarda los datos) o cliente. Se pregunta una sola vez, al instalar."""
+    modo = preferencias.leer()["modo"]
+    if modo in ("servidor", "cliente"):
+        return modo
+    if ruta_base_datos().exists():
+        # Instalación anterior a la versión con red: ya tiene datos, así que sigue siendo la computadora principal.
+        preferencias.guardar(modo="servidor")
+        return "servidor"
+    return _preguntar_modo()
+
+
+def _abrir_base():
+    try:
+        return BaseDatos(ruta_base_datos())
     except ErrorNegocio as e:
         QMessageBox.critical(None, NOMBRE_APP, str(e))
-        return 1
     except Exception:
         log.exception("No se pudo abrir la base de datos")
         QMessageBox.critical(
@@ -70,19 +130,20 @@ def main() -> int:
             "No se pudo abrir la base de datos.\n\nSi tenés una copia de seguridad, el soporte técnico puede "
             f"ayudarte a restaurarla. Los datos están en:\n{carpeta_datos()}",
         )
-        return 1
+    return None
 
-    ctx = Contexto(db)
+
+def _iniciar_servidor(db):
+    """Empieza a atender a las otras computadoras, si esta fue configurada como servidor de red."""
+    prefs = preferencias.leer()
+    if not prefs["red_activa"]:
+        return None
+    from .red.servidor import Servidor
+
+    servidor = Servidor(db, int(prefs["red_puerto"]))
     try:
-        dialogo = DialogoIngreso(ctx) if ctx.usuarios.hay_usuarios() else DialogoPrimerUso(ctx)
-        if not dialogo.exec():
-            return 0
-        ventana = VentanaPrincipal(ctx)
-        ventana.showMaximized()
-        codigo = app.exec()
-        del ventana  # las ventanas se destruyen antes que la aplicación
-        return codigo
-    finally:
-        db.cerrar()
-        candado.unlock()
-        log.info("Cierre de %s", NOMBRE_APP)
+        servidor.iniciar()
+    except ErrorNegocio as e:
+        QMessageBox.warning(None, NOMBRE_APP, f"{e}\n\nEsta computadora va a funcionar igual, pero las otras no van a poder conectarse.")
+        return None
+    return servidor

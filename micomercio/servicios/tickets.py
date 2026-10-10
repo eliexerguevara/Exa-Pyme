@@ -34,6 +34,8 @@ def _fila(etiqueta: str, valor: str, clase: str = "") -> str:
 
 
 def html_ticket(ctx, venta_id: int) -> str:
+    if getattr(ctx, "remoto", False):
+        return ctx.sistema.html_ticket(venta_id)
     v = ctx.ventas.obtener(venta_id)
     cfg = ctx.config
     partes = [ESTILO, f"<div class='c'><h1>{escape(cfg.obtener('comercio_nombre'))}</h1>"]
@@ -73,6 +75,8 @@ def html_ticket(ctx, venta_id: int) -> str:
 
 
 def html_cierre_caja(ctx, caja_id: int) -> str:
+    if getattr(ctx, "remoto", False):
+        return ctx.sistema.html_cierre_caja(caja_id)
     r = ctx.caja.resumen(caja_id)
     d = fmt_dinero
     partes = [ESTILO, f"<div class='c'><h1>{escape(ctx.config.obtener('comercio_nombre'))}</h1>"]

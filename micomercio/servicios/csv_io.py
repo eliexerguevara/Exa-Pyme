@@ -52,7 +52,7 @@ def exportar_productos(ctx, ruta: str | Path) -> int:
     return len(filas)
 
 
-def _leer(ruta: str | Path) -> list[dict]:
+def leer_archivo(ruta: str | Path) -> str:
     try:
         datos = Path(ruta).read_bytes()
     except OSError:
@@ -65,6 +65,10 @@ def _leer(ruta: str | Path) -> list[dict]:
             continue
     else:
         raise ErrorNegocio("No se pudo leer el archivo: guardalo desde Excel como «CSV UTF-8».")
+    return texto
+
+
+def _filas(texto: str) -> list[dict]:
     primera = texto.split("\n", 1)[0]
     delimitador = max(";,\t", key=primera.count)
     lector = csv.DictReader(texto.splitlines(), delimiter=delimitador)
@@ -74,6 +78,14 @@ def _leer(ruta: str | Path) -> list[dict]:
 
 
 def importar_productos(ctx, ruta: str | Path) -> dict:
+    """Importa desde un archivo de esta computadora. En un cliente, el contenido se envía al servidor."""
+    texto = leer_archivo(ruta)
+    if getattr(ctx, "remoto", False):
+        return ctx.sistema.importar_productos(texto)
+    return importar_productos_texto(ctx, texto)
+
+
+def importar_productos_texto(ctx, texto: str) -> dict:
     """Crea o actualiza productos desde un CSV con las mismas columnas que la exportación.
 
     Un producto existente se reconoce por su código interno o su código de barras.
@@ -83,7 +95,7 @@ def importar_productos(ctx, ruta: str | Path) -> dict:
     Las filas con errores se informan y no se importan; el resto sí.
     """
     ctx.requiere("productos_editar")
-    filas = _leer(ruta)
+    filas = _filas(texto)
     if filas and "nombre del producto" not in filas[0] and "nombre" not in filas[0]:
         raise ErrorNegocio(
             "El archivo no tiene la columna «Nombre del producto». Exportá primero los productos "

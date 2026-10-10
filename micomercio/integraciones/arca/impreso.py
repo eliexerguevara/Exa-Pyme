@@ -41,6 +41,8 @@ def _fila(nombre: str, valor: str, clase: str = "") -> str:
 
 
 def html_comprobante(ctx, comprobante_id: int) -> str:
+    if getattr(ctx, "remoto", False):
+        return ctx.sistema.html_comprobante(comprobante_id)
     from .servicio import ServicioArca
 
     c = ServicioArca(ctx).obtener(comprobante_id)

@@ -1,4 +1,4 @@
-- El programa ahora se llama Exa Pyme. Tus datos se conservan.
-- Pago combinado: una venta se puede cobrar con dos o más medios de pago (botón «Pago combinado», F9).
-- Devoluciones parciales: desde el detalle de una venta se pueden devolver solo algunos productos; vuelven al stock y el dinero se registra en la caja.
-- Si la venta tiene factura de ARCA, la devolución emite la nota de crédito por lo devuelto.
+- Varias computadoras: una es el servidor (guarda los datos) y las demás se conectan como clientes con su IP y su puerto.
+- Al instalar, el programa pregunta si la computadora es servidor o cliente. Las instalaciones existentes siguen como servidor.
+- En Configuración → Red se permite que otras computadoras se conecten y se ven la IP, el puerto y quiénes están conectados.
+- El cliente y el servidor deben tener la misma versión: actualizá primero el servidor.
