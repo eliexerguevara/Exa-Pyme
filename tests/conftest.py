@@ -7,6 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ["EXAPYME_SIN_ACTUALIZACIONES"] = "1"  # las pruebas no consultan GitHub
+os.environ["EXAPYME_SIN_CATALOGO"] = "1"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

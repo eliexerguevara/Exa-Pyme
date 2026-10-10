@@ -6,7 +6,7 @@ from decimal import Decimal
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QGridLayout, QLineEdit, QListWidget, QListWidgetItem, QRadioButton, QVBoxLayout,
+    QButtonGroup, QComboBox, QDialog, QGridLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QRadioButton, QVBoxLayout,
 )
 
 from ...core.dinero import D, a_centavos, a_milesimas, de_centavos, fmt_cantidad, fmt_dinero, fmt_pct, parse_decimal
@@ -15,7 +15,7 @@ from ...integraciones import arca, mercadopago
 from ...servicios import tickets
 from ...servicios.caja import MEDIOS
 from ...servicios.ventas import calcular_totales, estado_pago
-from .. import tema
+from .. import imagenes, tema
 from ..comunes import (
     Buscador, CampoDecimal, Dialogo, Pagina, Tabla, boton, cd, confirmar, etiqueta, fila, panel,
 )
@@ -332,7 +332,11 @@ class PaginaVenta(Pagina):
         self.l_total = etiqueta("$ 0,00", "total")
         self.l_total.setAlignment(Qt.AlignRight)
         vd.addWidget(self.l_total)
-        vd.addStretch(1)
+        self.foto = QLabel()
+        self.foto.setAlignment(Qt.AlignCenter)
+        self.foto.setMinimumHeight(10)
+        self.fotos: dict[int, object] = {}   # imágenes ya pedidas en esta sesión
+        vd.addWidget(self.foto, 1)
         vd.addWidget(etiqueta("Cobrar con", "suave"))
         cobros = QGridLayout()
         cobros.setSpacing(8)
@@ -465,7 +469,20 @@ class PaginaVenta(Pagina):
             self.avisar(str(e), error=True)
             return
         self.avisar(f"Agregado: {producto['nombre']}  ×  {fmt_cantidad(a_milesimas(linea['cantidad']))}")
+        self.mostrar_foto(producto)
         self.mostrar(self.carrito.index(linea))
+
+    def mostrar_foto(self, producto) -> None:
+        """Muestra la imagen del producto recién agregado, para que el cajero confirme de un vistazo que es el correcto."""
+        identificador = producto["id"]
+        if identificador not in self.fotos:
+            datos = self.ctx.productos.imagen(identificador) if producto["tiene_imagen"] else None
+            self.fotos[identificador] = imagenes.pixmap(datos, 150)
+        vista = self.fotos[identificador]
+        if vista is not None:
+            self.foto.setPixmap(vista)
+        else:
+            self.foto.clear()
 
     def _linea_actual(self) -> dict:
         n = self.tabla.currentRow()
@@ -513,6 +530,7 @@ class PaginaVenta(Pagina):
 
     def reiniciar(self) -> None:
         self.carrito, self.descuento = [], None
+        self.foto.clear()
         self.uuid = str(uuid.uuid4())
         self.cobrando = False
         self.cliente.setCurrentIndex(0)

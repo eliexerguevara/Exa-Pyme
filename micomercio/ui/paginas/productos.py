@@ -1,24 +1,52 @@
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 
+from PySide6.QtCore import Qt, QThread, Signal, Slot
+
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QPlainTextEdit, QVBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
+    QProgressDialog, QVBoxLayout,
 )
 
 from ...core import precios
 from ...core.dinero import D, de_milesimas, fmt_numero, fmt_pct, parse_decimal
 from ...core.errores import ErrorNegocio
 from ...core.util import fecha_legible
-from ...servicios import csv_io
+from ...servicios import catalogo_imagenes, csv_io
 from ...servicios.productos import UNIDADES
-from .. import tema
+from .. import imagenes, tema
 from ..comunes import (
     Buscador, CampoDecimal, Dialogo, Pagina, Tabla, advertir, boton, cd, cf, confirmar, cq, etiqueta, fila, informar,
     panel,
 )
 
 ORIGENES = {"alta": "Alta", "edicion": "Edición", "masivo": "Cambio masivo", "compra": "Compra", "importacion": "Importación"}
+
+
+def buscar_imagen(ctx, codigo_barras: str):
+    """Imagen de un código de barras: primero en el catálogo del comercio y, si está habilitado, en el de Internet."""
+    datos = ctx.productos.imagen_de_catalogo(codigo_barras)
+    if not datos and ctx.config.booleano("catalogo_en_linea"):
+        datos = catalogo_imagenes.buscar(codigo_barras)
+    return datos
+
+
+class _BusquedaImagen(QThread):
+    """Busca en segundo plano la imagen del catálogo para un código de barras."""
+
+    terminada = Signal(str, object)  # (código de barras, imagen o None)
+
+    def __init__(self, ctx, codigo: str):
+        super().__init__()
+        self.ctx, self.codigo = ctx, codigo
+
+    def run(self) -> None:
+        try:
+            self.terminada.emit(self.codigo, buscar_imagen(self.ctx, self.codigo))
+        except Exception:  # sin conexión o cualquier otro problema: el producto se carga igual, sin imagen
+            self.terminada.emit(self.codigo, None)
 
 
 class DialogoProducto(Dialogo):
@@ -106,6 +134,21 @@ class DialogoProducto(Dialogo):
         vd.addWidget(self.error_precio)
         vd.addWidget(self.aviso)
         vd.addLayout(fila(self.boton_margen, self.boton_auto, None))
+        # --- imagen ---
+        self.imagen, self.imagen_origen, self.imagen_cambiada, self.busqueda = None, "manual", False, None
+        self.foto = QLabel()
+        self.foto.setFixedSize(150, 150)
+        self.foto.setAlignment(Qt.AlignCenter)
+        self.foto.setStyleSheet(f"background: white; border: 1px solid {tema.BORDE}; border-radius: 8px; color: {tema.TEXTO_SUAVE};")
+        self.estado_foto = etiqueta("", "suave", True)
+        self.b_quitar_foto = boton("Quitar", self.quitar_imagen)
+        botones_foto = QVBoxLayout()
+        botones_foto.addWidget(etiqueta("Imagen del producto", "subtitulo"))
+        botones_foto.addWidget(self.estado_foto)
+        botones_foto.addLayout(fila(boton("Elegir imagen…", self.elegir_imagen), self.b_quitar_foto, None))
+        botones_foto.addStretch(1)
+        vd.addSpacing(6)
+        vd.addLayout(fila(self.foto, botones_foto, espacio=14))
         vd.addStretch(1)
 
         columnas = QHBoxLayout()
@@ -123,6 +166,7 @@ class DialogoProducto(Dialogo):
             datos.update(codigo=p["codigo"], codigo_barras=p["codigo_barras"], nombre=p["nombre"],
                          stock=de_milesimas(p["stock_mil"]), activo=bool(p["activo"]))
             self.stock.setReadOnly(True)
+            self.imagen = ctx.productos.imagen(producto_id)
             self.stock.setToolTip("El stock se modifica desde Inventario, para que quede registrado el movimiento.")
         self.cargar(datos or {
             "impuesto_pct": ctx.config.decimal("impuesto_predeterminado"), "ganancia_pct": Decimal(0),
@@ -135,7 +179,70 @@ class DialogoProducto(Dialogo):
         self.impuestos.editTextChanged.connect(lambda _: self.calcular())
         self.metodo.currentIndexChanged.connect(lambda _: self.calcular())
         self.final.textEdited.connect(lambda _: self.final_editado())
+        self.barras.editingFinished.connect(self.buscar_en_catalogo)
+        self.mostrar_imagen("")
         self.nombre.setFocus()
+
+    # ---- imagen ----------------------------------------------------------
+    def mostrar_imagen(self, estado: str) -> None:
+        vista = imagenes.pixmap(self.imagen, 146)
+        if vista is not None:
+            self.foto.setPixmap(vista)
+        else:
+            self.foto.clear()
+            self.foto.setText("Sin imagen")
+        self.b_quitar_foto.setEnabled(self.imagen is not None)
+        self.estado_foto.setText(estado or (
+            "" if self.imagen is not None else "Si el código de barras está en el catálogo, la imagen se carga sola."))
+
+    def buscar_en_catalogo(self) -> None:
+        """Si el producto no tiene imagen, busca una en el catálogo con su código de barras."""
+        codigo = self.barras.text().strip()
+        if self.imagen is not None or not catalogo_imagenes.candidatos(codigo) or os.environ.get("EXAPYME_SIN_CATALOGO"):
+            return
+        if self.busqueda is not None and self.busqueda.isRunning():
+            return
+        self.estado_foto.setText("Buscando la imagen en el catálogo…")
+        self.busqueda = _BusquedaImagen(self.ctx, codigo)
+        self.busqueda.terminada.connect(self.imagen_encontrada)
+        self.busqueda.start()
+
+    @Slot(str, object)
+    def imagen_encontrada(self, codigo: str, datos) -> None:
+        if self.imagen is not None or codigo != self.barras.text().strip():
+            return  # mientras tanto se eligió otra imagen o se cambió el código
+        if not datos:
+            self.mostrar_imagen("El catálogo no tiene imagen para este código. Podés elegir una.")
+            return
+        try:
+            self.imagen = imagenes.normalizar(datos)
+        except ErrorNegocio:
+            self.mostrar_imagen("")
+            return
+        self.imagen_origen, self.imagen_cambiada = "catalogo", True
+        self.mostrar_imagen("Imagen del catálogo, encontrada por el código de barras.")
+
+    def elegir_imagen(self) -> None:
+        ruta, _ = QFileDialog.getOpenFileName(self, "Elegir la imagen del producto", "", "Imágenes (*.jpg *.jpeg *.png *.webp *.bmp)")
+        if not ruta:
+            return
+        try:
+            with open(ruta, "rb") as archivo:
+                contenido = archivo.read()
+        except OSError:
+            raise ErrorNegocio("No se pudo abrir el archivo.") from None
+        self.imagen = imagenes.normalizar(contenido)
+        self.imagen_origen, self.imagen_cambiada = "manual", True
+        self.mostrar_imagen("Imagen elegida a mano.")
+
+    def quitar_imagen(self) -> None:
+        self.imagen, self.imagen_cambiada = None, True
+        self.mostrar_imagen("Sin imagen.")
+
+    def done(self, codigo: int) -> None:
+        if self.busqueda is not None and self.busqueda.isRunning():
+            self.busqueda.wait(9000)
+        super().done(codigo)
 
     # ---- carga -----------------------------------------------------------
     def cargar(self, d: dict) -> None:
@@ -234,6 +341,8 @@ class DialogoProducto(Dialogo):
             "Guardar igual",
         ):
             return
+        if self.imagen_cambiada:
+            datos.update(imagen=self.imagen, imagen_origen=self.imagen_origen, quitar_imagen=self.imagen is None)
         if self.producto_id:
             self.ctx.productos.actualizar(self.producto_id, datos)
         else:
@@ -367,9 +476,11 @@ class PaginaProductos(Pagina):
         self.b_estado = boton("Desactivar / activar", self.cambiar_estado)
         self.b_masivo = boton("Cambio masivo de precios", self.masivo)
         self.b_importar = boton("Importar CSV", self.importar)
-        self.solo_edicion = [self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_masivo, self.b_importar]
+        self.b_imagenes = boton("Buscar imágenes", self.completar_imagenes,
+                                ayuda="Busca en el catálogo la imagen de cada producto que todavía no tiene, por su código de barras.")
+        self.solo_edicion = [self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_masivo, self.b_importar, self.b_imagenes]
         self.cuerpo.addLayout(fila(
-            self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, None, self.b_masivo,
+            self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, None, self.b_imagenes, self.b_masivo,
             boton("Historial de precios", self.historial), self.b_importar, boton("Exportar CSV", self.exportar),
         ))
         self.tabla = Tabla(["Código", "Producto", "Categoría", "Precio Costo", "Impuestos",
@@ -432,6 +543,46 @@ class PaginaProductos(Pagina):
             self.inactivos.setChecked(True)
         self.ctx.productos.cambiar_estado(p["id"], not p["activo"])
         self.refrescar()
+
+    def completar_imagenes(self) -> None:
+        catalogo = self.ctx.productos.estado_catalogo()
+        if not catalogo["imagenes"] and not self.ctx.config.booleano("catalogo_en_linea"):
+            raise ErrorNegocio("Todavía no hay un catálogo de imágenes. Elegí la carpeta donde están las imágenes en "
+                               "Configuración → Ventas y precios (en la computadora principal).")
+        pendientes = self.ctx.productos.sin_imagen()
+        if not pendientes:
+            informar(self, "Todos los productos con código de barras ya tienen imagen.")
+            return
+        if not confirmar(self, f"Hay {len(pendientes)} productos con código de barras y sin imagen.\n\nSe va a buscar la imagen "
+                               "de cada uno en el catálogo de imágenes.", "Buscar imágenes"):
+            return
+        progreso = QProgressDialog("Buscando imágenes en el catálogo…", "Detener", 0, len(pendientes), self)
+        progreso.setWindowTitle("Imágenes de productos")
+        progreso.setWindowModality(Qt.WindowModal)
+        progreso.setMinimumDuration(0)
+        encontradas, problema = 0, ""
+        for n, producto in enumerate(pendientes):
+            progreso.setValue(n)
+            QApplication.processEvents()
+            if progreso.wasCanceled():
+                break
+            try:
+                datos = buscar_imagen(self.ctx, producto["codigo_barras"])
+                if datos:
+                    self.ctx.productos.guardar_imagen(producto["id"], imagenes.normalizar(datos), "catalogo")
+                    encontradas += 1
+            except catalogo_imagenes.SinConexion as e:
+                problema = str(e)
+                break
+            except ErrorNegocio:
+                continue  # esa imagen no sirve: se sigue con las demás
+        progreso.setValue(len(pendientes))
+        self.refrescar()
+        texto = f"Se cargaron {encontradas} imágenes. Los demás productos no figuran en el catálogo: se les puede poner una imagen a mano."
+        if problema:
+            advertir(self, f"{problema}\n\nHasta ese momento se cargaron {encontradas} imágenes.", "Imágenes de productos")
+        else:
+            informar(self, texto, "Imágenes de productos")
 
     def masivo(self) -> None:
         DialogoCambioMasivo(self, self.ctx).exec()

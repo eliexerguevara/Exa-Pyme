@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 from ..core import precios
 from ..core.dinero import D, a_centavos, a_milesimas, de_centavos, redondear
 from ..core.errores import ErrorNegocio
 from ..core.util import ahora
+from ..rutas import carpeta_datos
+from . import catalogo_imagenes
 
+TAMANO_MAXIMO_IMAGEN = 400 * 1024
+EXTENSIONES_CATALOGO = (".jpg", ".jpeg", ".png", ".webp")
 UNIDADES = ["unidad", "kg", "g", "litro", "ml", "metro", "caja", "pack", "docena"]
 
 SELECT_PRODUCTO = """
-    SELECT p.*, COALESCE(c.nombre, '') AS categoria, COALESCE(pr.nombre, '') AS proveedor
+    SELECT p.*, COALESCE(c.nombre, '') AS categoria, COALESCE(pr.nombre, '') AS proveedor,
+           EXISTS (SELECT 1 FROM producto_imagenes i WHERE i.producto_id = p.id) AS tiene_imagen
     FROM productos p
     LEFT JOIN categorias c ON c.id = p.categoria_id
     LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
@@ -201,6 +207,8 @@ class Productos:
             )
             producto_id = cur.lastrowid
             self._aplicar_precio(producto_id, None, campos, origen)
+            if d.get("imagen"):
+                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual")
             if stock > 0:
                 self.ctx.inventario.mover(producto_id, a_milesimas(stock), "inicial", "Stock inicial", "producto", producto_id)
         return producto_id
@@ -225,12 +233,78 @@ class Productos:
                 ),
             )
             self._aplicar_precio(producto_id, anterior, campos, origen)
+            if d.get("quitar_imagen"):
+                self.db.ejecutar("DELETE FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+            elif d.get("imagen"):
+                self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual")
             if anterior["precio_final_cent"] != campos["precio_final_cent"] or anterior["costo_cent"] != campos["costo_cent"]:
                 self.ctx.auditar(
                     "cambio_precio", "productos", producto_id,
                     f"{d['nombre']}: costo {de_centavos(anterior['costo_cent'])} -> {de_centavos(campos['costo_cent'])}, "
                     f"final {de_centavos(anterior['precio_final_cent'])} -> {de_centavos(campos['precio_final_cent'])}",
                 )
+
+    # ---- imagen ----------------------------------------------------------
+    def imagen(self, producto_id: int) -> bytes | None:
+        return self.db.valor("SELECT datos FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+
+    def _poner_imagen(self, producto_id: int, datos: bytes, origen: str) -> None:
+        if not isinstance(datos, (bytes, bytearray)) or bytes(datos[:3]) != b"\xff\xd8\xff":
+            raise ErrorNegocio("La imagen del producto no es válida.")
+        if len(datos) > TAMANO_MAXIMO_IMAGEN:
+            raise ErrorNegocio("La imagen del producto es demasiado grande.")
+        self.db.ejecutar(
+            """INSERT INTO producto_imagenes (producto_id, datos, origen, actualizado) VALUES (?,?,?,?)
+               ON CONFLICT(producto_id) DO UPDATE SET datos = excluded.datos, origen = excluded.origen,
+               actualizado = excluded.actualizado""",
+            (producto_id, bytes(datos), "catalogo" if origen == "catalogo" else "manual", ahora()),
+        )
+
+    def guardar_imagen(self, producto_id: int, datos: bytes, origen: str = "manual") -> None:
+        self.ctx.requiere("productos_editar")
+        with self.db.transaccion():
+            self.obtener(producto_id)
+            self._poner_imagen(producto_id, datos, origen)
+
+    def quitar_imagen(self, producto_id: int) -> None:
+        self.ctx.requiere("productos_editar")
+        with self.db.transaccion():
+            self.db.ejecutar("DELETE FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+
+    # ---- catálogo de imágenes (carpeta de la computadora principal) ----------
+    def carpeta_catalogo(self) -> Path:
+        elegida = self.ctx.config.obtener("catalogo_carpeta")
+        return Path(elegida) if elegida else carpeta_datos() / "catalogo-imagenes"
+
+    def estado_catalogo(self) -> dict:
+        carpeta = self.carpeta_catalogo()
+        cantidad = 0
+        if carpeta.is_dir():
+            cantidad = sum(1 for a in carpeta.iterdir() if a.suffix.lower() in EXTENSIONES_CATALOGO)
+        return {"carpeta": str(carpeta), "existe": carpeta.is_dir(), "imagenes": cantidad}
+
+    def imagen_de_catalogo(self, codigo_barras: str) -> bytes | None:
+        """Imagen del catálogo para ese código de barras, tal como está en la carpeta, o None si no hay."""
+        carpeta = self.carpeta_catalogo()
+        if not carpeta.is_dir():
+            return None
+        for nombre in catalogo_imagenes.candidatos(codigo_barras):  # solo letras, números y guiones: no sale de la carpeta
+            for extension in EXTENSIONES_CATALOGO:
+                archivo = carpeta / (nombre + extension)
+                try:
+                    if archivo.is_file() and archivo.stat().st_size <= 8 * 1024 * 1024:
+                        return archivo.read_bytes()
+                except OSError:
+                    continue
+        return None
+
+    def sin_imagen(self):
+        """Productos activos con código de barras que todavía no tienen imagen."""
+        return self.db.consultar(
+            """SELECT p.id, p.nombre, p.codigo_barras FROM productos p
+               WHERE p.activo = 1 AND p.codigo_barras <> ''
+                 AND NOT EXISTS (SELECT 1 FROM producto_imagenes i WHERE i.producto_id = p.id)
+               ORDER BY p.nombre COLLATE NOCASE""")
 
     def cambiar_estado(self, producto_id: int, activo: bool) -> None:
         """Desactivar no borra nada: el producto deja de ofrecerse pero su historial se conserva."""

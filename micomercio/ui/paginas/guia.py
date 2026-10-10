@@ -53,6 +53,18 @@ es más corto: abrir la caja, vender y cerrar la caja.</p>
       o menos, el programa avisa que hay que reponer).</li>
   <li>Completá el precio a la derecha (ver el tema 3) y pulsá <b>Guardar</b>.</li>
 </ol>
+<h3>Imagen del producto</h3>
+<p>El <b>catálogo de imágenes</b> es una carpeta con fotos de productos, donde cada archivo se llama como el código de
+barras (por ejemplo <i>7790001000012.jpg</i>). La carpeta se elige una sola vez, en la computadora principal, desde
+<b>Configuración</b> → <b>Ventas y precios</b> → <b>Catálogo de imágenes de productos</b>.</p>
+<ul>
+  <li><b>Se carga sola:</b> al escanear o escribir el <b>Código de barras</b> de un producto nuevo, el programa busca
+      su imagen en el catálogo y, si la encuentra, la muestra en la ficha. Se guarda al pulsar <b>Guardar</b>.</li>
+  <li><b>Si no está en el catálogo,</b> o querés otra, pulsá <b>Elegir imagen…</b> y elegí una foto de la computadora.</li>
+  <li><b>Para los productos que ya tenías cargados,</b> en la pantalla Productos pulsá <b>Buscar imágenes</b>: busca la
+      de todos los que tienen código de barras y todavía no tienen imagen.</li>
+</ul>
+<p>La imagen aparece en la pantalla de venta cuando se agrega el producto, para confirmar de un vistazo que es el correcto.</p>
 <h3>Buscar, editar y duplicar</h3>
 <ul>
   <li><b>Buscar:</b> escribí en el buscador parte del nombre, el código de barras, el código interno o la categoría.</li>

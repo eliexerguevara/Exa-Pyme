@@ -157,6 +157,20 @@ un **cliente** (se conecta al servidor con su IP y su puerto; hay una casilla pa
 Las pruebas (`tests/test_red.py`) levantan un servidor real en la misma máquina y conectan clientes por la red local
 (127.0.0.1), incluidas cuatro cajas vendiendo a la vez. No se probó entre dos computadoras físicas distintas.
 
+## Imágenes de productos
+
+- El **catálogo** es una carpeta de la computadora principal con una imagen por código de barras
+  (`7790001000012.jpg`; también `.png` y `.webp`). Se elige en Configuración → Ventas y precios; si no se elige ninguna,
+  se usa `%LOCALAPPDATA%\ExaPyme\catalogo-imagenes` cuando existe.
+- Al cargar un producto, el programa busca en el catálogo una imagen con su código de barras (probando también el código
+  con y sin ceros adelante) y la asocia al producto. También se puede elegir una imagen a mano.
+- «Buscar imágenes», en la pantalla Productos, hace lo mismo para todos los productos que todavía no tienen.
+- La imagen se guarda en la base (tabla `producto_imagenes`), reducida a 500 px: entra en las copias de seguridad y la ven
+  todas las computadoras de la red, que piden la imagen al servidor.
+- `python herramientas/preparar_imagenes.py <origen> <destino>` reduce una carpeta de imágenes al tamaño que usa el programa.
+- Las imágenes **no están publicadas en este repositorio**. El programa también sabe buscarlas en una dirección de
+  Internet (`servicios/catalogo_imagenes.py`), pero esa búsqueda está desactivada (`catalogo_en_linea`).
+
 ## Recuperación de la contraseña del administrador
 
 - Cada administrador tiene un **código de recuperación** de 20 caracteres. Se muestra una sola vez (al crear el

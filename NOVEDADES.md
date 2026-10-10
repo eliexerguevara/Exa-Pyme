@@ -1,4 +1,5 @@
-- Recuperación de la contraseña del administrador: en la pantalla de ingreso, «Olvidé mi contraseña», con un código de recuperación.
-- El código se muestra una sola vez y hay que guardarlo fuera de la computadora. Si no tenés uno, el programa te ofrece generarlo al ingresar.
-- También se puede generar desde Configuración → Usuarios → Mi código de recuperación.
+- Imágenes de productos: al cargar un producto con código de barras, su imagen se toma sola del catálogo de imágenes.
+- El catálogo es una carpeta de la computadora principal, que se elige en Configuración → Ventas y precios.
+- También se puede elegir una imagen a mano, y «Buscar imágenes» completa las de los productos ya cargados.
+- La pantalla de venta muestra la imagen del producto que se acaba de agregar.
 - Actualizá primero el servidor y después cada cliente.

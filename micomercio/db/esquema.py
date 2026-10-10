@@ -337,6 +337,16 @@ MIGRACIONES: list[str] = [
     ALTER TABLE usuarios ADD COLUMN recuperacion_hash TEXT;
     ALTER TABLE usuarios ADD COLUMN recuperacion_sal TEXT;
     """,
+    # ---- versión 7: imágenes de productos ------------------------------------
+    """
+    -- Aparte de la tabla de productos, para que las consultas habituales no carguen las imágenes.
+    CREATE TABLE producto_imagenes (
+        producto_id INTEGER PRIMARY KEY REFERENCES productos(id),
+        datos       BLOB NOT NULL,
+        origen      TEXT NOT NULL,      -- 'catalogo' (por código de barras) o 'manual'
+        actualizado TEXT NOT NULL
+    );
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)

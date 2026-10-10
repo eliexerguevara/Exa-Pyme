@@ -38,6 +38,9 @@ PREDETERMINADOS = {
     "fiscal_automatico": "0",
     # Mercado Pago (la credencial no se guarda acá: va cifrada en un archivo aparte)
     "seguridad_aviso": "",
+    # Catálogo de imágenes de productos: carpeta de la computadora principal con una imagen por código de barras
+    "catalogo_carpeta": "",
+    "catalogo_en_linea": "0",  # buscar también en el catálogo publicado en Internet (hoy no hay ninguno)
     "mp_habilitado": "0",
     "mp_usuario_id": "",
     "mp_cuenta": "",

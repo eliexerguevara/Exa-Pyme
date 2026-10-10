@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QLineEdit, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QFileDialog, QFormLayout, QLineEdit, QTabWidget, QVBoxLayout, QWidget
 
 from ... import __version__
 from ...core import precios
@@ -123,6 +123,12 @@ class PaginaConfiguracion(Pagina):
         f2.addRow("", etiqueta(
             "«Margen sobre el precio de venta»: con costo $ 10.000 y 30 % el precio sin impuestos es $ 14.285,71.\n"
             "«Recargo sobre el costo»: con los mismos datos el precio sin impuestos es $ 13.000,00.", "suave", True))
+        self.catalogo = QLineEdit()
+        self.catalogo.setPlaceholderText("Carpeta con las imágenes, nombradas por código de barras")
+        self.b_catalogo = boton("Elegir carpeta…", self.elegir_catalogo)
+        self.estado_catalogo = etiqueta("", "suave", True)
+        f2.addRow("Catálogo de imágenes de productos:", fila(self.catalogo, self.b_catalogo))
+        f2.addRow("", self.estado_catalogo)
         f2.addRow("", boton("Guardar", self.guardar_ventas, "primario"))
         pestanas.addTab(ventas, "Ventas y precios")
 
@@ -173,6 +179,16 @@ class PaginaConfiguracion(Pagina):
         self.negativo.setChecked(cfg.booleano("permitir_stock_negativo"))
         self.impuesto.setCurrentText(fmt_pct(cfg.decimal("impuesto_predeterminado")))
         self.metodo.setCurrentIndex(max(0, self.metodo.findData(cfg.obtener("metodo_precio_predeterminado"))))
+        self.catalogo.setText(cfg.obtener("catalogo_carpeta"))
+        remoto = getattr(self.ctx, "remoto", False)
+        self.b_catalogo.setVisible(not remoto)  # la carpeta está en la computadora principal
+        self.catalogo.setReadOnly(remoto)
+        catalogo = self.ctx.productos.estado_catalogo()
+        if catalogo["existe"]:
+            texto = f"{catalogo['imagenes']} imágenes en {catalogo['carpeta']}."
+        else:
+            texto = "Todavía no hay catálogo. Es una carpeta con una imagen por producto, cuyo nombre es el código de barras (7790001000012.jpg)."
+        self.estado_catalogo.setText(texto + (" Se configura en la computadora principal." if remoto else ""))
         self.mercado_pago.refrescar()
         self.red.refrescar()
         self.cargar_usuarios()
@@ -204,8 +220,15 @@ class PaginaConfiguracion(Pagina):
         self.ctx.config.guardar({
             "descuento_maximo_cajero_pct": str(descuento), "permitir_stock_negativo": self.negativo.isChecked(),
             "impuesto_predeterminado": str(impuesto), "metodo_precio_predeterminado": self.metodo.currentData(),
+            "catalogo_carpeta": self.catalogo.text().strip(),
         })
+        self.refrescar()
         informar(self, "La configuración se guardó.")
+
+    def elegir_catalogo(self) -> None:
+        carpeta = QFileDialog.getExistingDirectory(self, "Carpeta del catálogo de imágenes", self.catalogo.text())
+        if carpeta:
+            self.catalogo.setText(carpeta)
 
     def cargar_usuarios(self) -> None:
         usuarios = self.ctx.usuarios.listar()
