@@ -13,11 +13,14 @@ from . import catalogo_imagenes
 TAMANO_MAXIMO_IMAGEN = 400 * 1024
 TAMANO_MAXIMO_MINIATURA = 40 * 1024
 EXTENSIONES_CATALOGO = (".jpg", ".jpeg", ".png", ".webp")
+JPEG = b"\xff\xd8\xff"
+# Códigos de barras que ya se buscaron en el catálogo y no están, por carpeta: evita revisar el disco cada vez.
+_NO_ESTAN_EN_EL_CATALOGO: dict[str, set[str]] = {}
 UNIDADES = ["unidad", "kg", "g", "litro", "ml", "metro", "caja", "pack", "docena"]
 
 SELECT_PRODUCTO = """
     SELECT p.*, COALESCE(c.nombre, '') AS categoria, COALESCE(pr.nombre, '') AS proveedor,
-           EXISTS (SELECT 1 FROM producto_imagenes i WHERE i.producto_id = p.id) AS tiene_imagen
+           EXISTS (SELECT 1 FROM producto_imagenes i WHERE i.producto_id = p.id AND LENGTH(i.datos) > 0) AS tiene_imagen
     FROM productos p
     LEFT JOIN categorias c ON c.id = p.categoria_id
     LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
@@ -210,6 +213,10 @@ class Productos:
             self._aplicar_precio(producto_id, None, campos, origen)
             if d.get("imagen"):
                 self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual", d.get("miniatura"))
+            elif d.get("quitar_imagen"):
+                self._marcar_sin_imagen(producto_id)
+            else:
+                self._asociar_del_catalogo(producto_id, d["codigo_barras"])
             if stock > 0:
                 self.ctx.inventario.mover(producto_id, a_milesimas(stock), "inicial", "Stock inicial", "producto", producto_id)
         return producto_id
@@ -235,9 +242,11 @@ class Productos:
             )
             self._aplicar_precio(producto_id, anterior, campos, origen)
             if d.get("quitar_imagen"):
-                self.db.ejecutar("DELETE FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+                self._marcar_sin_imagen(producto_id)
             elif d.get("imagen"):
                 self._poner_imagen(producto_id, d["imagen"], d.get("imagen_origen") or "manual", d.get("miniatura"))
+            elif not self.db.uno("SELECT 1 FROM producto_imagenes WHERE producto_id = ?", (producto_id,)):
+                self._asociar_del_catalogo(producto_id, d["codigo_barras"])  # por ejemplo, si recién se le cargó el código
             if anterior["precio_final_cent"] != campos["precio_final_cent"] or anterior["costo_cent"] != campos["costo_cent"]:
                 self.ctx.auditar(
                     "cambio_precio", "productos", producto_id,
@@ -247,7 +256,16 @@ class Productos:
 
     # ---- imagen ----------------------------------------------------------
     def imagen(self, producto_id: int) -> bytes | None:
-        return self.db.valor("SELECT datos FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+        return self.db.valor("SELECT datos FROM producto_imagenes WHERE producto_id = ?", (producto_id,)) or None
+
+    def _marcar_sin_imagen(self, producto_id: int) -> None:
+        """El usuario quitó la imagen a propósito: se anota para que el catálogo no se la vuelva a poner."""
+        self.db.ejecutar(
+            """INSERT INTO producto_imagenes (producto_id, datos, origen, actualizado, miniatura) VALUES (?, x'', 'ninguna', ?, NULL)
+               ON CONFLICT(producto_id) DO UPDATE SET datos = x'', origen = 'ninguna', actualizado = excluded.actualizado,
+               miniatura = NULL""",
+            (producto_id, ahora()),
+        )
 
     def _poner_imagen(self, producto_id: int, datos: bytes, origen: str, miniatura: bytes | None = None) -> None:
         if not isinstance(datos, (bytes, bytearray)) or bytes(datos[:3]) != b"\xff\xd8\xff":
@@ -280,7 +298,7 @@ class Productos:
             grupo = ids[desde:desde + 400]
             for f in self.db.consultar(
                 f"SELECT producto_id, COALESCE(miniatura, datos) AS imagen FROM producto_imagenes "
-                f"WHERE producto_id IN ({','.join('?' * len(grupo))})", grupo,
+                f"WHERE LENGTH(datos) > 0 AND producto_id IN ({','.join('?' * len(grupo))})", grupo,
             ):
                 resultado[f["producto_id"]] = f["imagen"]
         return resultado
@@ -288,7 +306,7 @@ class Productos:
     def quitar_imagen(self, producto_id: int) -> None:
         self.ctx.requiere("productos_editar")
         with self.db.transaccion():
-            self.db.ejecutar("DELETE FROM producto_imagenes WHERE producto_id = ?", (producto_id,))
+            self._marcar_sin_imagen(producto_id)
 
     # ---- catálogo de imágenes (carpeta de la computadora principal) ----------
     def carpeta_catalogo(self) -> Path:
@@ -316,6 +334,52 @@ class Productos:
                 except OSError:
                     continue
         return None
+
+    def _lista_del_catalogo(self, codigo_barras: str) -> tuple[bytes, bytes | None] | None:
+        """Imagen del catálogo ya en el formato en que se guarda, con su miniatura: (imagen, miniatura)."""
+        datos = self.imagen_de_catalogo(codigo_barras)
+        if not datos:
+            return None
+        try:
+            from ..ui import imagenes  # reducir y convertir imágenes lo hace Qt
+
+            if not (datos[:3] == JPEG and len(datos) <= 150 * 1024):
+                datos = imagenes.normalizar(datos)
+            return datos, imagenes.miniatura(datos)
+        except Exception:
+            # Sin poder procesarla, sirve igual si ya es un JPEG de tamaño razonable.
+            return (datos, None) if datos[:3] == JPEG and len(datos) <= TAMANO_MAXIMO_IMAGEN else None
+
+    def _asociar_del_catalogo(self, producto_id: int, codigo_barras: str) -> bool:
+        """Si el catálogo tiene una imagen con ese código de barras, se la pone al producto."""
+        carpeta = str(self.carpeta_catalogo())
+        no_estan = _NO_ESTAN_EN_EL_CATALOGO.setdefault(carpeta, set())
+        if not codigo_barras or codigo_barras in no_estan:
+            return False
+        encontrada = self._lista_del_catalogo(codigo_barras)
+        if encontrada is None:
+            if Path(carpeta).is_dir():
+                no_estan.add(codigo_barras)
+            return False
+        self._poner_imagen(producto_id, encontrada[0], "catalogo", encontrada[1])
+        return True
+
+    def asociar_catalogo(self, revisar_todo: bool = False) -> int:
+        """Pone la imagen del catálogo a todos los productos que tienen código de barras y todavía no tienen imagen.
+
+        Se ejecuta sola (al abrir el programa, al entrar a Productos y al elegir la carpeta del catálogo), así que
+        el usuario no tiene que hacer nada. Devuelve cuántas imágenes se asociaron.
+        """
+        if revisar_todo:
+            _NO_ESTAN_EN_EL_CATALOGO.pop(str(self.carpeta_catalogo()), None)  # pudieron agregarse imágenes a la carpeta
+        if not self.carpeta_catalogo().is_dir():
+            return 0
+        asociadas = 0
+        for p in self.sin_imagen():
+            with self.db.transaccion():
+                if self._asociar_del_catalogo(p["id"], p["codigo_barras"]):
+                    asociadas += 1
+        return asociadas
 
     def sin_imagen(self):
         """Productos activos con código de barras que todavía no tienen imagen."""

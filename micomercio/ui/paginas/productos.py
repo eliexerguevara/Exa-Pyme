@@ -483,8 +483,8 @@ class PaginaProductos(Pagina):
         self.b_estado = boton("Desactivar / activar", self.cambiar_estado)
         self.b_masivo = boton("Cambio masivo de precios", self.masivo)
         self.b_importar = boton("Importar CSV", self.importar)
-        self.b_imagenes = boton("Buscar imágenes", self.completar_imagenes,
-                                ayuda="Busca en el catálogo la imagen de cada producto que todavía no tiene, por su código de barras.")
+        self.b_imagenes = boton("Actualizar imágenes", self.completar_imagenes,
+                                ayuda="Las imágenes se cargan solas. Usá este botón si agregaste imágenes nuevas a la carpeta del catálogo.")
         self.solo_edicion = [self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_masivo, self.b_importar, self.b_imagenes]
         # Dos renglones: en pantallas angostas una sola fila cortaba los textos de los botones.
         self.cuerpo.addLayout(fila(self.b_nuevo, self.b_editar, self.b_duplicar, self.b_estado, self.b_imagenes, None))
@@ -514,6 +514,10 @@ class PaginaProductos(Pagina):
         puede = self.ctx.puede("productos_editar")
         for b in self.solo_edicion:
             b.setVisible(puede)
+        try:
+            self.ctx.productos.asociar_catalogo()  # los productos sin imagen la toman solos del catálogo
+        except ErrorNegocio:
+            pass
         self.miniaturas.olvidar()  # pudo cambiar alguna imagen
         self.cargar()
 
@@ -560,45 +564,22 @@ class PaginaProductos(Pagina):
         self.refrescar()
 
     def completar_imagenes(self) -> None:
+        """Vuelve a revisar el catálogo completo (por si se agregaron imágenes a la carpeta)."""
         catalogo = self.ctx.productos.estado_catalogo()
-        if not catalogo["imagenes"] and not self.ctx.config.booleano("catalogo_en_linea"):
+        if not catalogo["imagenes"]:
             raise ErrorNegocio("Todavía no hay un catálogo de imágenes. Elegí la carpeta donde están las imágenes en "
                                "Configuración → Ventas y precios (en la computadora principal).")
-        pendientes = self.ctx.productos.sin_imagen()
-        if not pendientes:
-            informar(self, "Todos los productos con código de barras ya tienen imagen.")
-            return
-        if not confirmar(self, f"Hay {len(pendientes)} productos con código de barras y sin imagen.\n\nSe va a buscar la imagen "
-                               "de cada uno en el catálogo de imágenes.", "Buscar imágenes"):
-            return
-        progreso = QProgressDialog("Buscando imágenes en el catálogo…", "Detener", 0, len(pendientes), self)
-        progreso.setWindowTitle("Imágenes de productos")
-        progreso.setWindowModality(Qt.WindowModal)
-        progreso.setMinimumDuration(0)
-        encontradas, problema = 0, ""
-        for n, producto in enumerate(pendientes):
-            progreso.setValue(n)
-            QApplication.processEvents()
-            if progreso.wasCanceled():
-                break
-            try:
-                datos = buscar_imagen(self.ctx, producto["codigo_barras"])
-                if datos:
-                    lista = imagenes.normalizar(datos)
-                    self.ctx.productos.guardar_imagen(producto["id"], lista, "catalogo", imagenes.miniatura(lista))
-                    encontradas += 1
-            except catalogo_imagenes.SinConexion as e:
-                problema = str(e)
-                break
-            except ErrorNegocio:
-                continue  # esa imagen no sirve: se sigue con las demás
-        progreso.setValue(len(pendientes))
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            encontradas = self.ctx.productos.asociar_catalogo(True)
+        finally:
+            QApplication.restoreOverrideCursor()
         self.refrescar()
-        texto = f"Se cargaron {encontradas} imágenes. Los demás productos no figuran en el catálogo: se les puede poner una imagen a mano."
-        if problema:
-            advertir(self, f"{problema}\n\nHasta ese momento se cargaron {encontradas} imágenes.", "Imágenes de productos")
-        else:
-            informar(self, texto, "Imágenes de productos")
+        faltan = len(self.ctx.productos.sin_imagen())
+        texto = f"Se cargaron {encontradas} imágenes."
+        if faltan:
+            texto += f" Quedan {faltan} productos con código de barras que no figuran en el catálogo: se les puede poner una imagen a mano."
+        informar(self, texto, "Imágenes de productos")
 
     def masivo(self) -> None:
         DialogoCambioMasivo(self, self.ctx).exec()

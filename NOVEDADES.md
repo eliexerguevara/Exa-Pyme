@@ -1,2 +1,3 @@
-- La lista de Productos muestra la foto de cada producto, y el pie indica cuántos tienen imagen.
-- En la venta, cada producto del carrito aparece con su foto.
+- Las imágenes ahora se cargan solas: todo producto con código de barras recibe la imagen del catálogo sin abrir su ficha ni apretar ningún botón.
+- Vale también para los productos ya cargados, los que se importan por CSV y los que se crean desde otra computadora.
+- Si quitás la imagen de un producto a propósito, no se le vuelve a poner.

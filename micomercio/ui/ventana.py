@@ -222,6 +222,10 @@ class VentanaPrincipal(QMainWindow):
 
     def copia_automatica(self) -> None:
         try:
+            self.ctx.productos.asociar_catalogo()  # imágenes de productos, por código de barras
+        except Exception:
+            log.exception("No se pudieron asociar las imágenes del catálogo")
+        try:
             self.ctx.copias.automatica_si_corresponde()
         except Exception:
             log.exception("Falló la copia de seguridad automática")

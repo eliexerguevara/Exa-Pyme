@@ -160,16 +160,14 @@ def test_al_cargar_un_producto_la_imagen_aparece_por_el_codigo_de_barras(app, ct
     app.processEvents()
     assert f.imagen is not None and f.imagen_origen == "catalogo"
 
-    # Un producto cargado antes de tener catálogo: al abrir su ficha, la imagen aparece sola.
-    viejo = ctx.productos.crear({"nombre": "Cargado antes", "codigo_barras": "111122223333"})
-    g = modulo.DialogoProducto(None, ctx, viejo)
-    assert g.imagen is None
-    app.processEvents()                              # la búsqueda arranca apenas se abre
-    g.busqueda.wait(5000)
-    app.processEvents()
-    assert g.imagen is not None and g.imagen_cambiada and "catálogo" in g.estado_foto.text()
+    # Con el catálogo ya elegido, un producto nuevo recibe su imagen al guardarlo, sin tocar nada.
+    g = modulo.DialogoProducto(None, ctx)
+    g.nombre.setText("Guardado sin esperar la búsqueda")
+    g.barras.setText("111122223333")
+    f.barras.setText("")                              # (el otro diálogo deja libre el código)
     g.guardar()
-    assert ctx.productos.imagen(viejo) == g.imagen
+    assert ctx.productos.imagen(g.producto_id) is not None
+    assert ctx.db.valor("SELECT origen FROM producto_imagenes WHERE producto_id = ?", (g.producto_id,)) == "catalogo"
 
     ctx.config.guardar({"catalogo_carpeta": str(tmp_path / "no-existe")})
     h = modulo.DialogoProducto(None, ctx)
@@ -200,16 +198,19 @@ def test_buscar_imagenes_para_los_productos_que_no_tienen(app, ctx, producto, mo
     ventana = VentanaPrincipal(ctx)
     ventana.show()
     ventana.ir("productos")
-    ventana.paginas["productos"].completar_imagenes()
+    # Al entrar a Productos, el que está en el catálogo ya tiene su imagen: nadie apretó nada.
     assert ctx.productos.imagen(producto) is not None and ctx.productos.imagen(sin_catalogo) is None
-    assert "Se cargaron 1 imágenes" in avisos[0]
+    (carpeta / "2000000000017.jpg").write_bytes(foto)                  # se agrega una imagen nueva a la carpeta
+    ventana.paginas["productos"].completar_imagenes()                  # «Actualizar imágenes» la toma
+    assert ctx.productos.imagen(sin_catalogo) is not None and "Se cargaron 1 imágenes." in avisos[0]
 
     ctx.caja.abrir(0)
     ventana.ir("venta")
     pagina = ventana.paginas["venta"]
     pagina.agregar(ctx.productos.obtener(producto))
     assert not pagina.foto.pixmap().isNull()                             # el cajero ve la foto de lo que escaneó
-    pagina.agregar(ctx.productos.obtener(sin_catalogo))
+    sin_foto = ctx.productos.crear({"nombre": "Casero", "stock": 3})
+    pagina.agregar(ctx.productos.obtener(sin_foto))
     assert pagina.foto.pixmap().isNull()
     pagina.reiniciar()
     assert pagina.foto.pixmap().isNull() and venta is not None
@@ -281,4 +282,88 @@ def test_las_listas_muestran_la_miniatura(app, ctx, producto, tmp_path):
     venta.agregar(ctx.productos.obtener(producto))
     venta.agregar(ctx.productos.crear({"nombre": "Otro sin foto", "stock": 2}) and ctx.productos.por_codigo(ctx.productos.buscar("Otro sin foto")[0]["codigo"]))
     assert not venta.tabla.item(0, 1).icon().isNull() and venta.tabla.item(1, 1).icon().isNull()
+    ventana.close()
+
+
+def test_las_imagenes_se_cargan_solas_por_el_codigo_de_barras(app, ctx, producto, tmp_path):
+    """Lo que pidió el comercio: con solo tener el código de barras, el producto tiene su imagen."""
+    from micomercio.servicios import csv_io
+    from micomercio.ui.ventana import VentanaPrincipal
+
+    carpeta = tmp_path / "catalogo"
+    carpeta.mkdir()
+    for nombre in ("7790001000012.jpg", "7790895000782.jpg", "0076625211992.jpg", "7790310985113.jpg"):
+        (carpeta / nombre).write_bytes(imagen_de_prueba(500, 500, "JPG"))
+    (carpeta / "7791111111111.png").write_bytes(imagen_de_prueba(1500, 900, "PNG"))   # original grande, en PNG
+    coca = ctx.productos.crear({"nombre": "COCA COLA x 500 ml", "codigo_barras": "7790895000782"})   # cargados antes
+    casero = ctx.productos.crear({"nombre": "Pan casero", "codigo_barras": "2000000000017"})
+    assert ctx.productos.asociar_catalogo() == 0                           # todavía no hay catálogo
+
+    ctx.config.guardar({"catalogo_carpeta": str(carpeta)})
+    assert ctx.productos.asociar_catalogo() == 2                           # la yerba y la coca, que ya estaban cargadas
+    assert ctx.productos.imagen(coca)[:3] == b"\xff\xd8\xff" and ctx.productos.imagen(casero) is None
+    fila = ctx.db.uno("SELECT origen, LENGTH(miniatura) AS chica FROM producto_imagenes WHERE producto_id = ?", (coca,))
+    assert fila["origen"] == "catalogo" and 0 < fila["chica"] < 6000        # con su miniatura para las listas
+    assert ctx.productos.asociar_catalogo() == 0                           # no repite el trabajo
+
+    # Producto nuevo: la imagen queda desde el momento de crearlo (aunque el lector lea el código sin el cero).
+    snack = ctx.productos.crear({"nombre": "3D QUESO 43 g", "codigo_barras": "7790310985113"})
+    sin_cero = ctx.productos.crear({"nombre": "Importado", "codigo_barras": "76625211992"})
+    grande = ctx.productos.crear({"nombre": "Con PNG", "codigo_barras": "7791111111111"})
+    assert all(ctx.productos.imagen(p) for p in (snack, sin_cero, grande))
+    assert len(ctx.productos.imagen(grande)) < 60_000                      # se redujo al guardarla
+
+    # Se le carga el código de barras más tarde: recibe la imagen en ese momento.
+    tarde = ctx.productos.crear({"nombre": "Sin código todavía"})
+    (carpeta / "7792222222222.jpg").write_bytes(imagen_de_prueba(400, 400, "JPG"))
+    datos = ctx.productos.datos_para_duplicar(tarde)
+    datos.update(codigo="T1", nombre="Ahora con código", codigo_barras="7792222222222")
+    ctx.productos.actualizar(tarde, datos)
+    assert ctx.productos.imagen(tarde) is not None
+
+    # Importados desde un CSV.
+    archivo = tmp_path / "productos.csv"
+    (carpeta / "7793333333333.jpg").write_bytes(imagen_de_prueba(400, 400, "JPG"))
+    archivo.write_text("Código de barras;Nombre del producto;Precio Costo\n7793333333333;Importado por CSV;100\n", encoding="utf-8-sig")
+    assert csv_io.importar_productos(ctx, archivo)["creados"] == 1
+    assert ctx.productos.imagen(ctx.productos.por_codigo("7793333333333")["id"]) is not None
+
+    # Si alguien agrega la imagen de un producto después, «Actualizar imágenes» la toma.
+    (carpeta / "2000000000017.jpg").write_bytes(imagen_de_prueba(300, 300, "JPG"))
+    assert ctx.productos.asociar_catalogo() == 0 and ctx.productos.asociar_catalogo(True) == 1
+    assert ctx.productos.imagen(casero) is not None
+
+    # Quitar una imagen a propósito se respeta.
+    ctx.productos.quitar_imagen(coca)
+    assert ctx.productos.asociar_catalogo(True) == 0 and ctx.productos.imagen(coca) is None
+    assert ctx.productos.obtener(coca)["tiene_imagen"] == 0
+    ctx.productos.actualizar(coca, {**ctx.productos.datos_para_duplicar(coca), "codigo": "C1", "nombre": "COCA COLA x 500 ml",
+                                    "codigo_barras": "7790895000782"})
+    assert ctx.productos.imagen(coca) is None
+
+    ventana = VentanaPrincipal(ctx)                                        # la lista las muestra sin hacer nada
+    ventana.show()
+    ventana.ir("productos")
+    tabla = ventana.paginas["productos"].tabla
+    con_foto = {tabla.item(r, 1).text() for r in range(tabla.rowCount()) if not tabla.item(r, 1).icon().isNull()}
+    assert {"Yerba 1 kg", "3D QUESO 43 g", "Importado", "Con PNG", "Ahora con código", "Importado por CSV", "Pan casero"} == con_foto
+    ventana.close()
+
+
+def test_al_abrir_el_programa_las_imagenes_ya_estan(app, ctx, producto, tmp_path):
+    from micomercio.ui.ventana import VentanaPrincipal
+
+    carpeta = tmp_path / "catalogo"
+    carpeta.mkdir()
+    (carpeta / "7790001000012.jpg").write_bytes(imagen_de_prueba(500, 500, "JPG"))
+    ctx.config.guardar({"catalogo_carpeta": str(carpeta)})
+    ventana = VentanaPrincipal(ctx)
+    assert ctx.productos.imagen(producto) is None
+    ventana.copia_automatica()                                             # lo que el programa hace solo al abrirse
+    assert ctx.productos.imagen(producto) is not None
+    ctx.caja.abrir(0)
+    ventana.show()
+    ventana.ir("venta")                                                    # sin pasar nunca por la pantalla Productos
+    ventana.paginas["venta"].agregar(ctx.productos.por_codigo("7790001000012"))
+    assert not ventana.paginas["venta"].foto.pixmap().isNull()
     ventana.close()

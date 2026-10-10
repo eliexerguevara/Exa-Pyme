@@ -222,8 +222,10 @@ class PaginaConfiguracion(Pagina):
             "impuesto_predeterminado": str(impuesto), "metodo_precio_predeterminado": self.metodo.currentData(),
             "catalogo_carpeta": self.catalogo.text().strip(),
         })
+        asociadas = self.ctx.productos.asociar_catalogo(True)  # con el catálogo elegido, las imágenes se cargan solas
         self.refrescar()
-        informar(self, "La configuración se guardó.")
+        informar(self, "La configuración se guardó." + (
+            f"\n\nSe cargó la imagen de {asociadas} productos desde el catálogo." if asociadas else ""))
 
     def elegir_catalogo(self) -> None:
         carpeta = QFileDialog.getExistingDirectory(self, "Carpeta del catálogo de imágenes", self.catalogo.text())
