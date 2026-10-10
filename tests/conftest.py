@@ -11,7 +11,9 @@ os.environ["EXAPYME_SIN_ACTUALIZACIONES"] = "1"  # las pruebas no consultan GitH
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from micomercio.db import BaseDatos  # noqa: E402
-from micomercio.servicios import Contexto  # noqa: E402
+from micomercio.servicios import Contexto, usuarios  # noqa: E402
+
+usuarios.DEMORA_FALLO = 0  # sin esperas en las pruebas
 
 
 @pytest.fixture(scope="session")

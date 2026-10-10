@@ -157,9 +157,28 @@ un **cliente** (se conecta al servidor con su IP y su puerto; hay una casilla pa
 Las pruebas (`tests/test_red.py`) levantan un servidor real en la misma máquina y conectan clientes por la red local
 (127.0.0.1), incluidas cuatro cajas vendiendo a la vez. No se probó entre dos computadoras físicas distintas.
 
+## Recuperación de la contraseña del administrador
+
+- Cada administrador tiene un **código de recuperación** de 20 caracteres. Se muestra una sola vez (al crear el
+  administrador, al pedirlo en Configuración → Usuarios, o cuando el programa lo ofrece al ingresar) y en la base queda
+  solo su huella, como con las contraseñas.
+- En la pantalla de ingreso, **Olvidé mi contraseña** pide usuario, código y contraseña nueva. El código sirve una sola
+  vez: al usarlo se entrega otro. También funciona desde una computadora cliente, con el mismo freno de intentos que el ingreso.
+- **Herramienta de emergencia**, para quien perdió la contraseña y el código. Se ejecuta en la computadora principal,
+  con el programa cerrado:
+
+  ```powershell
+  & "$env:LOCALAPPDATA\Programs\ExaPyme\ExaPyme.exe" --restablecer-clave
+  ```
+
+  No se ofrece desde las pantallas del programa. El cambio queda en el registro de operaciones, anula el código anterior
+  y el programa lo avisa la próxima vez que ingresa un administrador.
+
+La contraseña del programa protege contra el uso indebido desde sus pantallas. No protege contra alguien con acceso
+completo a la sesión de Windows de la computadora principal: esa persona ya puede copiar o modificar el archivo de datos.
+
 ## Lo que todavía no hace
 
 - Mercado Pago: no hace devoluciones ni recibe notificaciones (webhooks); no cobra con Point ni con link de pago.
 - Facturación: solo productos (no servicios), en pesos, sin percepciones ni otros tributos. No emite Factura de Crédito MiPyME ni comprobantes de exportación.
 - Red: los clientes no pueden trabajar si el servidor está apagado.
-- Recuperación de la contraseña del administrador si se la olvida.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import time
 
 from ..core.errores import ErrorNegocio
 from ..core.util import ahora
@@ -10,6 +11,18 @@ from .contexto import ROLES
 
 ITERACIONES = 240_000
 LARGO_MINIMO_CLAVE = 4
+# Código de recuperación: 20 caracteres sin letras ni números que se confundan (0/O, 1/I).
+ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+DEMORA_FALLO = 1.0  # segundos de espera tras un código incorrecto
+
+
+def _normalizar_codigo(codigo: str) -> str:
+    return "".join(c for c in (codigo or "").upper() if c.isalnum())
+
+
+def _nuevo_codigo() -> str:
+    crudo = "".join(secrets.choice(ALFABETO_CODIGO) for _ in range(20))
+    return "-".join(crudo[i:i + 4] for i in range(0, 20, 4))
 
 
 def _hash(clave: str, sal: bytes) -> str:
@@ -101,3 +114,83 @@ class Usuarios:
                 (nombre.strip(), rol, 1 if activo else 0, usuario_id),
             )
             self.ctx.auditar("usuario_modificado", "usuarios", usuario_id, f"rol={rol} activo={int(activo)}")
+
+    # ---- recuperación de la contraseña del administrador -------------------
+    def tiene_codigo(self, usuario_id: int | None = None) -> bool:
+        fila = self.db.uno("SELECT recuperacion_hash FROM usuarios WHERE id = ?", (usuario_id or self.ctx.usuario_id,))
+        return bool(fila and fila["recuperacion_hash"])
+
+    def _guardar_codigo(self, usuario_id: int) -> str:
+        codigo, sal = _nuevo_codigo(), secrets.token_bytes(16)
+        self.db.ejecutar("UPDATE usuarios SET recuperacion_hash = ?, recuperacion_sal = ? WHERE id = ?",
+                         (_hash(_normalizar_codigo(codigo), sal), sal.hex(), usuario_id))
+        return codigo
+
+    def generar_codigo_recuperacion(self) -> str:
+        """Crea un código de recuperación para el administrador que tiene la sesión iniciada y lo devuelve.
+
+        Es la única vez que se puede ver: en la base queda solo su huella. El código anterior deja de servir.
+        """
+        if not self.ctx.es_admin:
+            raise ErrorNegocio("El código de recuperación es solo para administradores. La contraseña de un cajero "
+                               "la cambia un administrador desde Configuración → Usuarios.")
+        with self.db.transaccion():
+            codigo = self._guardar_codigo(self.ctx.usuario_id)
+            self.ctx.auditar("codigo_recuperacion", "usuarios", self.ctx.usuario_id, "Se generó un código de recuperación nuevo")
+        return codigo
+
+    def recuperar(self, usuario: str, codigo: str, clave_nueva: str) -> str:
+        """Cambia la contraseña de un administrador que la olvidó, usando su código de recuperación.
+
+        No hace falta tener la sesión iniciada. El código sirve una sola vez: se devuelve uno nuevo.
+        """
+        self._validar_clave(clave_nueva)
+        fila = self.db.uno("SELECT * FROM usuarios WHERE usuario = ?", ((usuario or "").strip(),))
+        correcto = False
+        if fila is not None and fila["rol"] == "admin" and fila["activo"] and fila["recuperacion_hash"]:
+            correcto = hmac.compare_digest(
+                _hash(_normalizar_codigo(codigo), bytes.fromhex(fila["recuperacion_sal"])), fila["recuperacion_hash"])
+        if not correcto:
+            time.sleep(DEMORA_FALLO)
+            raise ErrorNegocio("El usuario o el código de recuperación no son correctos.")
+        sal = secrets.token_bytes(16)
+        with self.db.transaccion():
+            self.db.ejecutar("UPDATE usuarios SET clave_hash = ?, clave_sal = ? WHERE id = ?",
+                             (_hash(clave_nueva, sal), sal.hex(), fila["id"]))
+            nuevo = self._guardar_codigo(fila["id"])
+            self.ctx.auditar("clave_recuperada", "usuarios", fila["id"],
+                             f"{fila['usuario']} cambió su contraseña con el código de recuperación")
+        return nuevo
+
+    def administradores(self):
+        return self.db.consultar("SELECT id, usuario, nombre FROM usuarios WHERE rol = 'admin' AND activo = 1 ORDER BY nombre")
+
+    def restablecer_sin_codigo(self, usuario_id: int, clave_nueva: str) -> None:
+        """Último recurso, para quien perdió la contraseña y el código: solo se usa desde la herramienta
+        ExaPyme.exe --restablecer-clave, en la computadora que tiene los datos. Queda registrado y el programa
+        lo avisa en el próximo ingreso de un administrador."""
+        self._validar_clave(clave_nueva)
+        fila = self.db.uno("SELECT * FROM usuarios WHERE id = ? AND rol = 'admin' AND activo = 1", (usuario_id,))
+        if fila is None:
+            raise ErrorNegocio("Elegí un administrador activo.")
+        sal = secrets.token_bytes(16)
+        with self.db.transaccion():
+            self.db.ejecutar(
+                "UPDATE usuarios SET clave_hash = ?, clave_sal = ?, recuperacion_hash = NULL, recuperacion_sal = NULL WHERE id = ?",
+                (_hash(clave_nueva, sal), sal.hex(), usuario_id))
+            self.ctx.config.guardar({"seguridad_aviso": f"{ahora()}|{fila['usuario']}"}, auditar=False)
+            self.ctx.auditar("clave_restablecida", "usuarios", usuario_id,
+                             f"Contraseña de {fila['usuario']} restablecida sin código, desde la herramienta de emergencia")
+
+    def aviso_de_seguridad(self) -> str:
+        """Texto para mostrar al administrador si su contraseña fue restablecida sin código. Se muestra una vez."""
+        if not self.ctx.es_admin:
+            return ""
+        valor = self.ctx.config.obtener("seguridad_aviso")
+        if not valor:
+            return ""
+        self.ctx.config.guardar({"seguridad_aviso": ""})
+        fecha, _, usuario = valor.partition("|")
+        return (f"La contraseña del administrador «{usuario}» fue restablecida el {fecha[:16]} con la herramienta de "
+                "emergencia, sin usar el código de recuperación.\n\nSi no fuiste vos, alguien tuvo acceso a la "
+                "computadora principal: cambiá la contraseña y revisá el registro de operaciones.")

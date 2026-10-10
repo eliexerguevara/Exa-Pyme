@@ -174,6 +174,22 @@ class VentanaPrincipal(QMainWindow):
         self.estado_caja.setStyleSheet(
             "background: #DCFCE7; color: #166534;" if abierta else "background: #FEE2E2; color: #991B1B;")
 
+    def revisar_seguridad(self) -> None:
+        """Al ingresar un administrador: avisa si su contraseña fue restablecida y ofrece crear el código de recuperación."""
+        if not self.ctx.es_admin:
+            return
+        from .acceso import DialogoCodigo
+        from .comunes import advertir, confirmar
+
+        aviso = self.ctx.usuarios.aviso_de_seguridad()
+        if aviso:
+            advertir(self, aviso, "Aviso de seguridad")
+        if not self.ctx.usuarios.tiene_codigo() and confirmar(
+                self, "Todavía no tenés un código de recuperación.\n\nSi algún día olvidás la contraseña del administrador, "
+                      "ese código es la forma de recuperarla. Lleva un minuto.\n\n¿Generarlo ahora?",
+                "Generar ahora", "Más tarde", "Código de recuperación"):
+            DialogoCodigo(self, self.ctx.usuarios.generar_codigo_recuperacion(), self.ctx).exec()
+
     def refrescar_estado(self) -> None:
         if self.remoto or (self.servidor is not None and self.servidor.activo):
             try:

@@ -399,8 +399,21 @@ con una copia se recupera todo.</p>
 <p>En <b>Configuración</b> → <b>Ventas y precios</b> se define el descuento máximo que puede aplicar un cajero y si se
 permite vender sin stock. En <b>Registro de operaciones</b> quedan anotados los cambios de precios, las anulaciones,
 los ajustes de inventario y los cierres de caja, con fecha y usuario.</p>
-""" + _nota("Guardá la contraseña del administrador en un lugar seguro. Si se olvida, el programa no tiene forma "
-            "de recuperarla.", "ojo")),
+<h3>Si el administrador olvida su contraseña</h3>
+<p>Cada administrador tiene un <b>código de recuperación</b>: veinte letras y números que el programa muestra una
+sola vez, al crear el usuario, y que conviene anotar o imprimir y guardar fuera de la computadora.</p>
+<ol>
+  <li>En la pantalla de ingreso, pulsá <b>Olvidé mi contraseña</b>.</li>
+  <li>Escribí tu usuario, el código de recuperación y la contraseña nueva (dos veces).</li>
+  <li>El programa cambia la contraseña y te muestra un <b>código nuevo</b>: el anterior ya no sirve. Guardalo igual que el primero.</li>
+</ol>
+<p>Si todavía no tenés código, o querés cambiarlo, generalo desde <b>Configuración</b> → <b>Usuarios</b> →
+<b>Mi código de recuperación</b>. Al ingresar, el programa también te lo ofrece si ve que no tenés uno.</p>
+<p>La contraseña de un <b>cajero</b> no necesita código: se la cambia un administrador desde
+<b>Configuración</b> → <b>Usuarios</b> → <b>Editar / cambiar contraseña</b>.</p>
+""" + _nota("Quien tenga el código puede cambiar la contraseña del administrador: no lo dejes pegado en el monitor "
+            "ni en un archivo de la computadora. Si perdiste la contraseña y también el código, consultá con el soporte "
+            "técnico.", "ojo")),
 
     ("15. Atajos de teclado", """
 <h2>Atajos de teclado</h2>

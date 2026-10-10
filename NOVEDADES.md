@@ -1,4 +1,4 @@
-- Una caja diaria por cada computadora, con su propio saldo inicial, movimientos y arqueo al cierre.
-- En la pantalla de ingreso de cada cliente se pone el nombre de su caja (por ejemplo «Caja 2»); el de la principal se cambia en Configuración → Red.
-- El administrador ve las jornadas de todas las cajas, puede cerrar la de otra computadora y tiene el reporte «Cierres de caja por computadora».
+- Recuperación de la contraseña del administrador: en la pantalla de ingreso, «Olvidé mi contraseña», con un código de recuperación.
+- El código se muestra una sola vez y hay que guardarlo fuera de la computadora. Si no tenés uno, el programa te ofrece generarlo al ingresar.
+- También se puede generar desde Configuración → Usuarios → Mi código de recuperación.
 - Actualizá primero el servidor y después cada cliente.

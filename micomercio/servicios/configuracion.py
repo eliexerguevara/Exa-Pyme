@@ -37,6 +37,7 @@ PREDETERMINADOS = {
     "fiscal_habilitado": "0",
     "fiscal_automatico": "0",
     # Mercado Pago (la credencial no se guarda acá: va cifrada en un archivo aparte)
+    "seguridad_aviso": "",
     "mp_habilitado": "0",
     "mp_usuario_id": "",
     "mp_cuenta": "",

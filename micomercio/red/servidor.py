@@ -31,7 +31,8 @@ INTENTOS_MAXIMOS, BLOQUEO_SEGUNDOS = 5, 30
 # None = todos los métodos públicos del servicio, menos los de BLOQUEADOS.
 SERVICIOS = {
     "config": {"obtener", "booleano", "decimal", "entero", "guardar"},
-    "usuarios": {"hay_usuarios", "listar", "crear", "cambiar_clave", "actualizar"},
+    "usuarios": {"hay_usuarios", "listar", "crear", "cambiar_clave", "actualizar", "tiene_codigo",
+                 "generar_codigo_recuperacion", "aviso_de_seguridad"},
     "productos": None, "inventario": None, "clientes": None, "compras": None, "caja": None, "ventas": None,
     "reportes": {"generar"},
     "arca": None,
@@ -217,6 +218,8 @@ class Servidor:
                                                   "comercio": Contexto(self.db).config.obtener("comercio_nombre")}}
             if accion == "ingresar":
                 return {"ok": True, "resultado": self._ingresar(pedido, ip)}
+            if accion == "recuperar":
+                return {"ok": True, "resultado": self._recuperar(pedido, ip)}
             sesion = self._sesion(pedido.get("sesion"))
             if accion == "salir":
                 with self.candado:
@@ -232,16 +235,35 @@ class Servidor:
             return {"ok": False, "error": "interno",
                     "mensaje": "Ocurrió un problema inesperado en el servidor y la operación no se completó."}
 
-    def _ingresar(self, pedido: dict, ip: str) -> dict:
-        from ..servicios import Contexto
-        from ..servicios.contexto import PERMISOS
-
+    def _frenar_intentos(self, ip: str) -> float:
         ahora = time.time()
         with self.candado:
             recientes = [t for t in self.fallos.get(ip, []) if ahora - t < BLOQUEO_SEGUNDOS]
             self.fallos[ip] = recientes
             if len(recientes) >= INTENTOS_MAXIMOS:
                 raise ErrorNegocio("Demasiados intentos fallidos. Esperá medio minuto y volvé a probar.")
+        return ahora
+
+    def _recuperar(self, pedido: dict, ip: str) -> dict:
+        """Un administrador que olvidó su contraseña la cambia con su código de recuperación."""
+        from ..servicios import Contexto
+
+        ahora = self._frenar_intentos(ip)
+        try:
+            codigo = Contexto(self.db).usuarios.recuperar(
+                str(pedido.get("usuario", "")), str(pedido.get("codigo", "")), str(pedido.get("clave", "")))
+        except ErrorNegocio:
+            with self.candado:
+                self.fallos.setdefault(ip, []).append(ahora)
+            raise
+        log.info("Contraseña recuperada desde la red (%s)", ip)
+        return {"codigo": codigo}
+
+    def _ingresar(self, pedido: dict, ip: str) -> dict:
+        from ..servicios import Contexto
+        from ..servicios.contexto import PERMISOS
+
+        ahora = self._frenar_intentos(ip)
         if pedido.get("version") != __version__:
             raise ErrorNegocio(
                 f"Esta computadora tiene la versión {pedido.get('version')} de Exa Pyme y el servidor la {__version__}. "

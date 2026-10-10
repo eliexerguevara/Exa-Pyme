@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QLocale, QLockFile
+from PySide6.QtCore import QLocale, QLockFile, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -86,6 +86,7 @@ def main() -> int:
             break
         ventana = VentanaPrincipal(ctx, servidor)
         ventana.showMaximized()
+        QTimer.singleShot(700, ventana.revisar_seguridad)
         codigo = app.exec()
         servidor = ventana.servidor
         del ventana  # las ventanas se destruyen antes que la aplicación

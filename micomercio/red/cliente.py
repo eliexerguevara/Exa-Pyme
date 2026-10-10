@@ -89,6 +89,8 @@ class Cliente:
                 raise
             except (http.client.HTTPException, ssl.SSLError, ConnectionError, socket.timeout, OSError) as e:
                 self._cerrar()
+                if isinstance(e, ErrorNegocio):
+                    raise
                 # Una conexión que quedó abierta sin uso puede haberse cortado: se reintenta una vez si es seguro.
                 if intento == 1 and reutilizada and isinstance(
                         e, (http.client.RemoteDisconnected, ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
@@ -111,6 +113,10 @@ class Cliente:
         datos = self.pedir({"accion": "ingresar", "usuario": usuario, "clave": clave, "version": __version__, "puesto": puesto})
         self.sesion = datos["sesion"]
         return datos
+
+    def recuperar(self, usuario: str, codigo: str, clave: str) -> str:
+        """Cambia la contraseña de un administrador con su código de recuperación. Devuelve el código nuevo."""
+        return self.pedir({"accion": "recuperar", "usuario": usuario, "codigo": codigo, "clave": clave})["codigo"]
 
     def salir(self) -> None:
         if self.sesion:

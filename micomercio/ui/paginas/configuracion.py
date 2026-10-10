@@ -21,6 +21,8 @@ ACCIONES = {
     "pago_cancelado": "Pago cancelado", "pago_agregado": "Cobro registrado", "pago_comision": "Comisión cargada",
     "compra": "Compra", "configuracion": "Cambio de configuración", "usuario_creado": "Usuario creado",
     "usuario_modificado": "Usuario modificado", "usuario_clave": "Cambio de contraseña",
+    "codigo_recuperacion": "Código de recuperación generado", "clave_recuperada": "Contraseña recuperada con el código",
+    "clave_restablecida": "Contraseña restablecida sin código",
     "copia_restaurada": "Copia de seguridad restaurada", "importacion_productos": "Importación de productos",
     "comprobante_autorizado": "Comprobante autorizado por ARCA", "comprobante_rechazado": "Comprobante rechazado por ARCA",
     "producto_activado": "Producto activado", "producto_desactivado": "Producto desactivado",
@@ -134,7 +136,9 @@ class PaginaConfiguracion(Pagina):
         usuarios = QWidget()
         vu = QVBoxLayout(usuarios)
         vu.setContentsMargins(0, 12, 0, 0)
-        vu.addLayout(fila(boton("Nuevo usuario", self.nuevo_usuario, "primario"), boton("Editar / cambiar contraseña", self.editar_usuario), None))
+        vu.addLayout(fila(boton("Nuevo usuario", self.nuevo_usuario, "primario"), boton("Editar / cambiar contraseña", self.editar_usuario), None,
+                         boton("Mi código de recuperación…", self.codigo_recuperacion,
+                               ayuda="Para poder cambiar tu contraseña de administrador si la olvidás.")))
         self.tabla_usuarios = Tabla(["Nombre", "Usuario", "Rol", "Estado", "Creado"], estirar=0)
         self.tabla_usuarios.activada.connect(self.editar_usuario)
         vu.addWidget(self.tabla_usuarios)
@@ -207,6 +211,16 @@ class PaginaConfiguracion(Pagina):
         usuarios = self.ctx.usuarios.listar()
         self.tabla_usuarios.cargar([[u["nombre"], u["usuario"], ROLES[u["rol"]], "Activo" if u["activo"] else "Inactivo",
                                      cf(u["creado_en"])] for u in usuarios], [u["id"] for u in usuarios])
+
+    def codigo_recuperacion(self) -> None:
+        from ..acceso import DialogoCodigo
+        from ..comunes import confirmar
+
+        texto = ("Se va a generar un código de recuperación nuevo para tu usuario."
+                 + (" El código anterior deja de servir." if self.ctx.usuarios.tiene_codigo() else "") + "\n\n¿Continuar?")
+        if confirmar(self, texto, "Generar código"):
+            DialogoCodigo(self, self.ctx.usuarios.generar_codigo_recuperacion(), self.ctx).exec()
+            self.refrescar()
 
     def nuevo_usuario(self) -> None:
         if DialogoUsuario(self, self.ctx).exec():

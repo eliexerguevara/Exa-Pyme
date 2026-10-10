@@ -331,6 +331,12 @@ MIGRACIONES: list[str] = [
     -- Cada computadora puede tener una sola caja abierta a la vez.
     CREATE UNIQUE INDEX ux_caja_abierta ON cajas(puesto COLLATE NOCASE) WHERE estado = 'abierta';
     """,
+    # ---- versión 6: recuperación de la contraseña del administrador -----------
+    """
+    -- Del código de recuperación se guarda solo su huella, igual que con las contraseñas.
+    ALTER TABLE usuarios ADD COLUMN recuperacion_hash TEXT;
+    ALTER TABLE usuarios ADD COLUMN recuperacion_sal TEXT;
+    """,
 ]
 
 VERSION_ESQUEMA = len(MIGRACIONES)

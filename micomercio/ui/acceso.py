@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QLineEdit, QRadioButton, 
 from .. import preferencias
 from ..core.errores import ErrorNegocio
 from ..red.cliente import Cliente, ContextoRemoto, HuellaDistinta
-from .comunes import Dialogo, boton, confirmar, etiqueta, fila
+from .comunes import Dialogo, boton, confirmar, etiqueta, fila, informar
 
 
 class DialogoPrimerUso(Dialogo):
@@ -40,6 +40,7 @@ class DialogoPrimerUso(Dialogo):
         self.ctx.usuarios.crear(self.usuario.text(), self.nombre.text(), self.clave.text(), "admin")
         self.ctx.usuarios.iniciar_sesion(self.usuario.text(), self.clave.text())
         self.ctx.config.guardar({"comercio_nombre": self.comercio.text().strip()})
+        DialogoCodigo(self, self.ctx.usuarios.generar_codigo_recuperacion(), self.ctx).exec()
         self.accept()
 
 
@@ -58,7 +59,16 @@ class DialogoIngreso(Dialogo):
         self.formulario.addRow("Usuario:", self.usuario)
         self.formulario.addRow("Contraseña:", self.clave)
         self.terminar()
+        self.botones.addButton(boton("Olvidé mi contraseña", self.olvide), self.botones.ButtonRole.ResetRole)
         (self.clave if self.usuario.text() else self.usuario).setFocus()
+
+    def olvide(self) -> None:
+        dialogo = DialogoRecuperar(self, self.ctx.usuarios.recuperar, self.usuario.text())
+        if dialogo.exec():
+            DialogoCodigo(self, dialogo.codigo_nuevo, self.ctx).exec()
+            self.usuario.setText(dialogo.usuario.text())
+            self.clave.clear()
+            self.clave.setFocus()
 
     def guardar(self) -> None:
         try:
@@ -142,6 +152,7 @@ class DialogoConexion(Dialogo):
         self.formulario.addRow("Nombre de esta caja:", self.puesto)
         self.formulario.addRow("Usuario:", self.usuario)
         self.formulario.addRow("Contraseña:", self.clave)
+        self.formulario.addRow("", fila(boton("Olvidé mi contraseña", self.olvide), None))
         self.terminar()
         self.botones.addButton(boton("Usar como servidor…", self.pasar_a_servidor, ayuda="Esta computadora pasa a ser la principal y trabaja con sus propios datos."), self.botones.ButtonRole.ResetRole)
         self.botones.addButton(boton("Actualizar programa", self.actualizar,
@@ -167,6 +178,18 @@ class DialogoConexion(Dialogo):
         informar(self, f"Exa Pyme se actualizó a la versión {instalada.version}. El programa se va a reiniciar.")
         actualizador.reiniciar(exe)
         self.reject()
+
+    def olvide(self) -> None:
+        host, puerto = self.host.text().strip(), self.puerto.value()
+        if not host:
+            raise ErrorNegocio("Primero escribí la dirección IP del servidor.")
+        cliente = Cliente(host, puerto, self.huella if (host, puerto) == self.origen else "")
+        dialogo = DialogoRecuperar(self, cliente.recuperar, self.usuario.text())
+        if dialogo.exec():
+            DialogoCodigo(self, dialogo.codigo_nuevo).exec()
+            self.usuario.setText(dialogo.usuario.text())
+            self.clave.clear()
+            self.clave.setFocus()
 
     def pasar_a_servidor(self) -> None:
         self.cambiar_modo = True
@@ -208,4 +231,87 @@ class DialogoConexion(Dialogo):
         else:
             preferencias.guardar(servidor_host="", servidor_huella="")
         self.ctx = ctx
+        self.accept()
+
+
+class DialogoCodigo(Dialogo):
+    """Muestra, por única vez, el código de recuperación del administrador."""
+
+    def __init__(self, padre, codigo: str, ctx=None):
+        super().__init__(padre, "Código de recuperación", "Continuar", 520)
+        self.codigo, self.ctx = codigo, ctx
+        self.cuerpo.insertWidget(0, etiqueta("Tu código de recuperación", "titulo"))
+        self.cuerpo.insertWidget(1, etiqueta(
+            "Si alguna vez olvidás la contraseña del administrador, con este código vas a poder poner una nueva. "
+            "Anotalo o imprimilo y guardalo fuera de la computadora, en un lugar que solo vos conozcas.", ajustar=True))
+        visor = QLineEdit(codigo)
+        visor.setReadOnly(True)
+        visor.setAlignment(Qt.AlignCenter)
+        visor.setStyleSheet("font-family: Consolas, 'Courier New'; font-size: 18pt; font-weight: 600; padding: 12px; letter-spacing: 1px;")
+        self.cuerpo.insertWidget(2, visor)
+        botones = [boton("Copiar", self.copiar)]
+        if ctx is not None:
+            botones.append(boton("Imprimir", self.imprimir))
+        self.cuerpo.insertLayout(3, fila(*botones, None))
+        self.cuerpo.insertWidget(4, etiqueta(
+            "Es la única vez que se muestra: el programa no lo guarda. Sirve una sola vez; después de usarlo se te "
+            "da otro. Quien tenga este código puede cambiar tu contraseña.", "aviso", True))
+        self.guardado = QCheckBox("Ya guardé el código en un lugar seguro")
+        self.guardado.toggled.connect(self.boton_aceptar.setEnabled)
+        self.cuerpo.insertWidget(5, self.guardado)
+        self.boton_aceptar.setEnabled(False)
+        self.cuerpo.addWidget(self.boton_aceptar)   # sin «Cancelar»: hay que confirmar que se guardó
+
+    def copiar(self) -> None:
+        QApplication.clipboard().setText(self.codigo)
+
+    def imprimir(self) -> None:
+        from .impresion import mostrar_comprobante
+
+        html = ("<h2>Exa Pyme</h2><p><b>Código de recuperación de la contraseña del administrador</b></p>"
+                f"<p style='font-size:16pt; font-family: Consolas, monospace;'><b>{self.codigo}</b></p>"
+                "<p>Guardá esta hoja en un lugar seguro, fuera de la computadora. Para usarlo: en la pantalla de "
+                "ingreso, «Olvidé mi contraseña».</p>")
+        mostrar_comprobante(self, self.ctx, html, "Código de recuperación")
+
+    def reject(self) -> None:
+        if self.guardado.isChecked():
+            super().reject()
+
+
+class DialogoRecuperar(Dialogo):
+    """Olvidé mi contraseña: el administrador pone una nueva usando su código de recuperación."""
+
+    def __init__(self, padre, recuperar, usuario: str = ""):
+        super().__init__(padre, "Olvidé mi contraseña", "Cambiar contraseña", 520)
+        self.recuperar, self.codigo_nuevo = recuperar, ""
+        self.cuerpo.insertWidget(0, etiqueta(
+            "Si sos administrador, escribí tu usuario y el código de recuperación que guardaste. "
+            "Si sos cajero, pedile a un administrador que te cambie la contraseña desde Configuración → Usuarios.",
+            "suave", True))
+        self.usuario, self.codigo = QLineEdit(usuario), QLineEdit()
+        self.codigo.setPlaceholderText("XXXX-XXXX-XXXX-XXXX-XXXX")
+        self.clave, self.clave2 = QLineEdit(), QLineEdit()
+        for campo in (self.clave, self.clave2):
+            campo.setEchoMode(QLineEdit.Password)
+        self.formulario.addRow("Usuario:", self.usuario)
+        self.formulario.addRow("Código de recuperación:", self.codigo)
+        self.formulario.addRow("Contraseña nueva:", self.clave)
+        self.formulario.addRow("Repetir contraseña:", self.clave2)
+        self.cuerpo.addWidget(etiqueta(
+            "¿No tenés el código? Consultá con el soporte técnico: hay una herramienta de emergencia que se usa "
+            "en la computadora principal.", "suave", True))
+        self.terminar()
+        (self.codigo if usuario else self.usuario).setFocus()
+
+    def guardar(self) -> None:
+        if self.clave.text() != self.clave2.text():
+            raise ErrorNegocio("Las dos contraseñas no coinciden.")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            self.codigo_nuevo = self.recuperar(self.usuario.text(), self.codigo.text(), self.clave.text())
+        finally:
+            QApplication.restoreOverrideCursor()
+        informar(self, "La contraseña se cambió. A continuación vas a ver tu código de recuperación nuevo: "
+                       "el anterior ya no sirve.")
         self.accept()

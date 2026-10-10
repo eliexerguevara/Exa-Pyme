@@ -14,6 +14,11 @@ if __name__ == "__main__":
         posicion = sys.argv.index("--actualizar")
         sys.exit(actualizar_sin_interfaz(sys.argv[posicion + 1] if len(sys.argv) > posicion + 1 else None))
 
+    if "--restablecer-clave" in sys.argv:
+        from micomercio.herramienta_clave import ejecutar as restablecer
+
+        sys.exit(restablecer())
+
     from micomercio.app import main
 
     sys.exit(main())
