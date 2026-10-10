@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 
-from PySide6.QtCore import Qt, QThread, Signal, Slot
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
 
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
@@ -181,6 +181,8 @@ class DialogoProducto(Dialogo):
         self.final.textEdited.connect(lambda _: self.final_editado())
         self.barras.editingFinished.connect(self.buscar_en_catalogo)
         self.mostrar_imagen("")
+        # Un producto que ya tiene código de barras pero no imagen: se busca apenas se abre la ficha.
+        QTimer.singleShot(0, self.buscar_en_catalogo)
         self.nombre.setFocus()
 
     # ---- imagen ----------------------------------------------------------
@@ -212,7 +214,11 @@ class DialogoProducto(Dialogo):
         if self.imagen is not None or codigo != self.barras.text().strip():
             return  # mientras tanto se eligió otra imagen o se cambió el código
         if not datos:
-            self.mostrar_imagen("El catálogo no tiene imagen para este código. Podés elegir una.")
+            if self.ctx.productos.estado_catalogo()["imagenes"]:
+                self.mostrar_imagen("El catálogo no tiene imagen para este código. Podés elegir una.")
+            else:
+                self.mostrar_imagen("Todavía no se eligió la carpeta del catálogo de imágenes: se hace en "
+                                    "Configuración → Ventas y precios, en la computadora principal.")
             return
         try:
             self.imagen = imagenes.normalizar(datos)

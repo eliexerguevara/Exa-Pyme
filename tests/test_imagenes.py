@@ -145,7 +145,7 @@ def test_al_cargar_un_producto_la_imagen_aparece_por_el_codigo_de_barras(app, ct
     f.imagen_encontrada("999", foto_catalogo)                            # respuesta de un código que ya se cambió: se ignora
     assert f.imagen is None
     f.imagen_encontrada("111122223333", None)
-    assert f.imagen is None and "no tiene imagen" in f.estado_foto.text()
+    assert f.imagen is None and "Todavía no se eligió la carpeta" in f.estado_foto.text()   # aún no hay catálogo
     f.imagen_encontrada("111122223333", b"no es una imagen")             # una respuesta rara no rompe nada
     assert f.imagen is None
 
@@ -159,6 +159,23 @@ def test_al_cargar_un_producto_la_imagen_aparece_por_el_codigo_de_barras(app, ct
     f.busqueda.wait(5000)
     app.processEvents()
     assert f.imagen is not None and f.imagen_origen == "catalogo"
+
+    # Un producto cargado antes de tener catálogo: al abrir su ficha, la imagen aparece sola.
+    viejo = ctx.productos.crear({"nombre": "Cargado antes", "codigo_barras": "111122223333"})
+    g = modulo.DialogoProducto(None, ctx, viejo)
+    assert g.imagen is None
+    app.processEvents()                              # la búsqueda arranca apenas se abre
+    g.busqueda.wait(5000)
+    app.processEvents()
+    assert g.imagen is not None and g.imagen_cambiada and "catálogo" in g.estado_foto.text()
+    g.guardar()
+    assert ctx.productos.imagen(viejo) == g.imagen
+
+    ctx.config.guardar({"catalogo_carpeta": str(tmp_path / "no-existe")})
+    h = modulo.DialogoProducto(None, ctx)
+    h.barras.setText("7790001000777")
+    h.imagen_encontrada("7790001000777", None)
+    assert "Todavía no se eligió la carpeta" in h.estado_foto.text()   # explica por qué no hay imagen
 
 
 def test_buscar_imagenes_para_los_productos_que_no_tienen(app, ctx, producto, monkeypatch, tmp_path):
